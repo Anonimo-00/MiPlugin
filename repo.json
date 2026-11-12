@@ -1,0 +1,8 @@
+{
+  "name": "Proveedor Latinos",
+  "description": "Extensiones de CloudStream para sololatino.net y flixlatam.com",
+  "manifestVersion": 1,
+  "pluginLists": [
+    "https://raw.githubusercontent.com/Anonimo-00/MiPlugin/builds/plugins.json"
+  ]
+}
