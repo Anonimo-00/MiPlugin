@@ -84,7 +84,12 @@ de EMBED69 con los servidores embebidos en el HTML:
 El workflow **Build** compila las extensiones y publica `plugins.json` y los
 `.cs3` en la rama `builds`. Cuando termine, agrega este repositorio en la app:
 
-`https://raw.githubusercontent.com/Anonimo-00/MiPlugin/builds/plugins.json`
+- `https://raw.githubusercontent.com/Anonimo-00/MiPlugin/builds/plugins.json`
+
+o, si tu versión de la app usa el manifiesto clásico, el `repo.json` de la
+rama principal:
+
+- `https://raw.githubusercontent.com/Anonimo-00/MiPlugin/master/repo.json`
 
 ## Compilar localmente
 
