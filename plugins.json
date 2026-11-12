@@ -1,0 +1,257 @@
+[
+    {
+        "iconUrl": "https://animeonline.one/wp-content/uploads/2026/10/psyren.jpg",
+        "fileHash": "sha256-25914693abbdb9fa55e956581b21e3be2b80fe12f30dab41ed1d5d68c7522cc2",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Anonimo-00/MiPlugin",
+        "fileSize": 83459,
+        "status": 1,
+        "language": "es",
+        "authors": [
+            "Anonimo-00"
+        ],
+        "tvTypes": [
+            "Anime"
+        ],
+        "version": 7,
+        "internalName": "AnimeOnlineProvider",
+        "description": "Animes en espanol latino desde animeonline.one",
+        "url": "https://raw.githubusercontent.com/Anonimo-00/MiPlugin/builds/AnimeOnlineProvider.cs3?v=sha25625914693abbdb9fa55e956581b21e3be2b80fe12f30dab41ed1d5d68c7522cc2",
+        "name": "AnimeOnlineProvider"
+    },
+    {
+        "iconUrl": "https://cinecalidad.org/wp-content/uploads/2026/10/cropped-Sin-titu2lo-3-300x300.png",
+        "fileHash": "sha256-5bc7479ea5dc74ba025a64cf3a09f6a3cf6cdd8ca4ae9058e3572ef3264c60d8",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Anonimo-00/MiPlugin",
+        "fileSize": 54900,
+        "status": 1,
+        "language": "es",
+        "authors": [
+            "Anonimo-00"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime"
+        ],
+        "version": 7,
+        "internalName": "CinecalidadProvider",
+        "description": "Peliculas, series y animes en espanol latino desde cinecalidad.org",
+        "url": "https://raw.githubusercontent.com/Anonimo-00/MiPlugin/builds/CinecalidadProvider.cs3?v=sha2565bc7479ea5dc74ba025a64cf3a09f6a3cf6cdd8ca4ae9058e3572ef3264c60d8",
+        "name": "CinecalidadProvider"
+    },
+    {
+        "iconUrl": "https://www.flixcorn.net/favicon.ico",
+        "fileHash": "sha256-45eeea450dd254f04abeeaf6cbff49fb67e050182c2ad90a3d0d52162d3c366b",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Anonimo-00/MiPlugin",
+        "fileSize": 64710,
+        "status": 1,
+        "language": "es",
+        "authors": [
+            "Anonimo-00"
+        ],
+        "tvTypes": [
+            "TvSeries",
+            "Anime"
+        ],
+        "version": 7,
+        "internalName": "FlixCornProvider",
+        "description": "Series y animes en espanol latino desde flixcorn.net",
+        "url": "https://raw.githubusercontent.com/Anonimo-00/MiPlugin/builds/FlixCornProvider.cs3?v=sha25645eeea450dd254f04abeeaf6cbff49fb67e050182c2ad90a3d0d52162d3c366b",
+        "name": "FlixCornProvider"
+    },
+    {
+        "iconUrl": "https://flixlatam.com/themes/dooplay/assets/img/favicon.png",
+        "fileHash": "sha256-2e5d25136fe5c9f45ccd5871ee3e01046a32f443f9514d742003ee0c97bf6fe7",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Anonimo-00/MiPlugin",
+        "fileSize": 65759,
+        "status": 1,
+        "language": "es",
+        "authors": [
+            "Anonimo-00"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime"
+        ],
+        "version": 7,
+        "internalName": "FlixLatamProvider",
+        "description": "Peliculas, series y animes en espanol latino desde flixlatam.com",
+        "url": "https://raw.githubusercontent.com/Anonimo-00/MiPlugin/builds/FlixLatamProvider.cs3?v=sha2562e5d25136fe5c9f45ccd5871ee3e01046a32f443f9514d742003ee0c97bf6fe7",
+        "name": "FlixLatamProvider"
+    },
+    {
+        "iconUrl": "https://gnula.la/wp-content/uploads/2026/09/cropped-descarga.webp",
+        "fileHash": "sha256-130e6294ae2b5e970f5cf0b71147622160d184f4d0419689b76dbe9015d87551",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Anonimo-00/MiPlugin",
+        "fileSize": 54870,
+        "status": 1,
+        "language": "es",
+        "authors": [
+            "Anonimo-00"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime"
+        ],
+        "version": 7,
+        "internalName": "GnulaProvider",
+        "description": "Peliculas, series y animes en espanol latino desde gnula.la",
+        "url": "https://raw.githubusercontent.com/Anonimo-00/MiPlugin/builds/GnulaProvider.cs3?v=sha256130e6294ae2b5e970f5cf0b71147622160d184f4d0419689b76dbe9015d87551",
+        "name": "GnulaProvider"
+    },
+    {
+        "iconUrl": "https://hdfullcdn.cc/favicon.ico",
+        "fileHash": "sha256-eb5baab5220ef07689e6a640aa4a802b048ad05ac5564af803492dd89889de31",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Anonimo-00/MiPlugin",
+        "fileSize": 84226,
+        "status": 1,
+        "language": "es",
+        "authors": [
+            "Anonimo-00"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 7,
+        "internalName": "HdfullProvider",
+        "description": "Peliculas y series en espanol latino desde hdfull.org (necesita cuenta)",
+        "url": "https://raw.githubusercontent.com/Anonimo-00/MiPlugin/builds/HdfullProvider.cs3?v=sha256eb5baab5220ef07689e6a640aa4a802b048ad05ac5564af803492dd89889de31",
+        "name": "HdfullProvider"
+    },
+    {
+        "iconUrl": "https://latanime.org/favicon.ico",
+        "fileHash": "sha256-d99fbfbb5155d0442d7ca8f299458f84d815cc793ce160bb028d92e99d50eeaf",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Anonimo-00/MiPlugin",
+        "fileSize": 61032,
+        "status": 1,
+        "language": "es",
+        "authors": [
+            "Anonimo-00"
+        ],
+        "tvTypes": [
+            "Anime"
+        ],
+        "version": 7,
+        "internalName": "LatanimeProvider",
+        "description": "Animes en espanol latino desde latanime.org",
+        "url": "https://raw.githubusercontent.com/Anonimo-00/MiPlugin/builds/LatanimeProvider.cs3?v=sha256d99fbfbb5155d0442d7ca8f299458f84d815cc793ce160bb028d92e99d50eeaf",
+        "name": "LatanimeProvider"
+    },
+    {
+        "iconUrl": "https://pelisplushd.la/static/images/logo/logo.png",
+        "fileHash": "sha256-440a1b03fb074753199f34567b8e0131877d023c22438410f63a7e93176a88e0",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Anonimo-00/MiPlugin",
+        "fileSize": 64385,
+        "status": 1,
+        "language": "es",
+        "authors": [
+            "Anonimo-00"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime"
+        ],
+        "version": 7,
+        "internalName": "PelisPlusHDProvider",
+        "description": "Peliculas, series y animes en espanol latino desde pelisplushd.la",
+        "url": "https://raw.githubusercontent.com/Anonimo-00/MiPlugin/builds/PelisPlusHDProvider.cs3?v=sha256440a1b03fb074753199f34567b8e0131877d023c22438410f63a7e93176a88e0",
+        "name": "PelisPlusHDProvider"
+    },
+    {
+        "iconUrl": "https://serieslan.live/favicon.ico",
+        "fileHash": "sha256-9c82c28842147266a72d3faae433417ea57d713d971bc8355616dc892175d489",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Anonimo-00/MiPlugin",
+        "fileSize": 64432,
+        "status": 1,
+        "language": "es",
+        "authors": [
+            "Anonimo-00"
+        ],
+        "tvTypes": [
+            "TvSeries",
+            "Anime"
+        ],
+        "version": 7,
+        "internalName": "SeriesLanProvider",
+        "description": "Series y animes en espanol latino desde serieslan.live",
+        "url": "https://raw.githubusercontent.com/Anonimo-00/MiPlugin/builds/SeriesLanProvider.cs3?v=sha2569c82c28842147266a72d3faae433417ea57d713d971bc8355616dc892175d489",
+        "name": "SeriesLanProvider"
+    },
+    {
+        "iconUrl": "https://sololatino.net/images/logo.png",
+        "fileHash": "sha256-bfda356aa273b69bd6a3b9f83e7efc49aba273e8a79859e40153d9547f88b127",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Anonimo-00/MiPlugin",
+        "fileSize": 77623,
+        "status": 1,
+        "language": "es",
+        "authors": [
+            "Anonimo-00"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime",
+            "Cartoon",
+            "AsianDrama"
+        ],
+        "version": 7,
+        "internalName": "SoloLatinoProvider",
+        "description": "Peliculas, series, animes y doramas en espanol latino desde sololatino.net",
+        "url": "https://raw.githubusercontent.com/Anonimo-00/MiPlugin/builds/SoloLatinoProvider.cs3?v=sha256bfda356aa273b69bd6a3b9f83e7efc49aba273e8a79859e40153d9547f88b127",
+        "name": "SoloLatinoProvider"
+    },
+    {
+        "iconUrl": "https://ver.gnula.one/favicon.ico",
+        "fileHash": "sha256-4785ae87ca167e426114a89fbaf4cac58d59151075d44212c5bb93ddb3bc1dc3",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Anonimo-00/MiPlugin",
+        "fileSize": 61728,
+        "status": 1,
+        "language": "es",
+        "authors": [
+            "Anonimo-00"
+        ],
+        "tvTypes": [
+            "Movie"
+        ],
+        "version": 7,
+        "internalName": "VerGnulaProvider",
+        "description": "Peliculas en espanol latino desde ver.gnula.one",
+        "url": "https://raw.githubusercontent.com/Anonimo-00/MiPlugin/builds/VerGnulaProvider.cs3?v=sha2564785ae87ca167e426114a89fbaf4cac58d59151075d44212c5bb93ddb3bc1dc3",
+        "name": "VerGnulaProvider"
+    },
+    {
+        "iconUrl": "https://verpeliculasultra.com/templates/vpu/images/logo.png",
+        "fileHash": "sha256-c6e51af8983fb5ec01e8c3460a417cd9afe6759c6e8fdd58ed273a27f884c2b2",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Anonimo-00/MiPlugin",
+        "fileSize": 62878,
+        "status": 1,
+        "language": "es",
+        "authors": [
+            "Anonimo-00"
+        ],
+        "tvTypes": [
+            "Movie"
+        ],
+        "version": 7,
+        "internalName": "VerPeliculasUltraProvider",
+        "description": "Peliculas en espanol latino desde verpeliculasultra.com",
+        "url": "https://raw.githubusercontent.com/Anonimo-00/MiPlugin/builds/VerPeliculasUltraProvider.cs3?v=sha256c6e51af8983fb5ec01e8c3460a417cd9afe6759c6e8fdd58ed273a27f884c2b2",
+        "name": "VerPeliculasUltraProvider"
+    }
+]

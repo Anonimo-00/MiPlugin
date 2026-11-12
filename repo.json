@@ -1,0 +1,9 @@
+{
+  "name": "Proveedor Latinos",
+  "description": "13 extensiones de CloudStream para catálogos de streaming en español latino (películas, series, animes y doramas)",
+  "iconUrl": "https://sololatino.net/wp-content/uploads/2020/10/cropped-logo-final-192x192.png",
+  "manifestVersion": 1,
+  "pluginLists": [
+    "https://raw.githubusercontent.com/Anonimo-00/MiPlugin/builds/plugins.json"
+  ]
+}
