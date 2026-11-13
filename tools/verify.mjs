@@ -307,10 +307,71 @@ async function verifyFlixLatam() {
   if (links.length < 2) fail("se esperaban varias fuentes");
 }
 
+// --------------------------------------------------------------- PelisPlusHD
+
+async function verifyPelisPlusHD() {
+  console.log("\n== PelisPlusHD (pelisplushd.la) ==");
+  const BASE = "https://pelisplushd.la";
+  const get = async (u) => {
+    const r = await fetch(u, { headers: { "User-Agent": UA }, redirect: "follow" });
+    return { status: r.status, url: r.url, t: await r.text() };
+  };
+
+  const catalog = await get(`${BASE}/peliculas`);
+  const cards = (catalog.t.match(/class="Posters-link"/g) || []).length;
+  cards > 0 ? ok(`catalogo: ${cards} tarjetas en /peliculas`) : fail("catalogo: sin tarjetas");
+
+  const search = await get(`${BASE}/search?s=batman`);
+  const found = (search.t.match(/class="Posters-link"/g) || []).length;
+  found > 0 ? ok(`busqueda: ${found} resultados para "batman"`) : fail("busqueda: sin resultados");
+
+  const detailUrl = (catalog.t.match(/href="(\/pelicula\/[^"]+)"/) || [])[1];
+  if (!detailUrl) {
+    fail("ficha: no se encontro url de pelicula");
+    return;
+  }
+  const detail = await get(BASE + detailUrl);
+  const title = (detail.t.match(/<h1[^>]*>([\s\S]{0,120}?)<\/h1>/) || [])[1]?.replace(/<[^>]+>/g, " ").trim();
+  const year = (detail.t.match(/Fecha de estreno:<\/span>\s*(\d{4})/) || [])[1];
+  const poster = (detail.t.match(/<img[^>]*src="(\/poster\/[^"]+)"/) || [])[1];
+  title ? ok(`ficha ${detailUrl}: "${title}" (${year}, poster ${poster ? "si" : "no"})`) : fail("ficha: sin titulo");
+
+  // Los reproductores van en li[data-url] (pelicula) o en #link_url span[url] (episodio)
+  const embedUrls = [
+    ...new Set(
+      [...detail.t.matchAll(/(?:data-url="([^"]+)"|<span lid="\d+" url="([^"]+)")/g)]
+        .map((m) => m[1] || m[2])
+        .filter((u) => u && u.startsWith("http"))
+    ),
+  ];
+  const servers = [...new Set([...detail.t.matchAll(/<li role="presentation"[^>]*>\s*<a[^>]*>([^<]+)</g)].map((m) => m[1].trim()))];
+  if (embedUrls.length === 0) {
+    fail("reproductor: no se encontraron URLs de servidor");
+  } else {
+    ok(`reproductor: ${embedUrls.length} servidores (${servers.join(", ") || "?"})`);
+    for (const url of embedUrls) {
+      const res = await fetch(url, { headers: { "User-Agent": UA, Referer: detail.url } }).catch(() => null);
+      console.log(`  \u00b7 ${url} (${res ? res.status : "sin respuesta"})`);
+    }
+  }
+
+  // Episodios de una serie
+  const series = await get(`${BASE}/series`);
+  const serieUrl = (series.t.match(/href="(\/serie\/[^"]+)"/) || [])[1];
+  if (serieUrl) {
+    const serie = await get(BASE + serieUrl);
+    const episodes = [...new Set([...serie.t.matchAll(/href="(\/serie\/[^"]*\/temporada\/[^"]*\/capitulo\/[^"]*)"/g)].map((m) => m[1]))];
+    episodes.length > 0 ? ok(`serie ${serieUrl}: ${episodes.length} episodios (${episodes[0]})`) : fail("serie: sin episodios");
+  } else {
+    fail("serie: no se encontro url de serie");
+  }
+}
+
 // --------------------------------------------------------------------- main
 
 const which = process.argv[2] || "ambos";
 if (which === "soloLatino" || which === "ambos") await verifySoloLatino();
 if (which === "flixlatam" || which === "ambos") await verifyFlixLatam();
+if (which === "pelisplushd" || which === "ambos") await verifyPelisPlusHD();
 console.log(failed ? "\nFALLOS" : "\nTODO CORRECTO");
 process.exitCode = failed ? 1 : 0;

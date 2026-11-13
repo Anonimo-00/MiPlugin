@@ -7,6 +7,7 @@ catálogos de streaming en español latino:
 |---|---|---|---|
 | `SoloLatinoProvider` | [sololatino.net](https://sololatino.net) | Películas, series, animes y doramas | es |
 | `FlixLatamProvider` | [flixlatam.com](https://flixlatam.com) | Películas, series y animes | es |
+| `PelisPlusHDProvider` | [pelisplushd.la](https://pelisplushd.la) | Películas, series y animes | es |
 
 > **Nota:** este repositorio se ha desarrollado **con ayuda de IA** (asistente
 > de programación). El código se ha ido verificando contra los sitios reales
@@ -50,6 +51,13 @@ repositorio y un workflow que publica los `.cs3` en la rama `builds`.
             ├── FlixLatamPlugin.kt
             ├── FlixLatamProvider.kt
             └── FlixLatamPlayer.kt      # Delega en el reproductor EMBED69 común
+├── PelisPlusHDProvider/
+│   ├── build.gradle.kts
+│   └── src/main/
+│       ├── AndroidManifest.xml
+│       └── kotlin/com/anonimo00/pelisplushd/
+│           ├── PelisPlusHDPlugin.kt
+│           └── PelisPlusHDProvider.kt
 ```
 
 El código de `shared/` se incrusta en cada `.cs3` mediante
@@ -88,6 +96,7 @@ Los dos sitios ofrecen **varias fuentes por título**, no una sola:
 |---|---|---|
 | sololatino.net | 2 HLS + 6 embebidas | `player.pelisserieshoy.com` (LAT y SUB) + `embed69.org` (LAT/SUB × 3 servidores) |
 | flixlatam.com | 6 embebidas | `dataLink` del reproductor EMBED69 (LAT/SUB × streamwish, voe, vidhide) |
+| pelisplushd.la | 3 embebidas | `li[data-url]` / `#link_url span[url]` (streamwish, vidhide, vidara) |
 
 Las HLS de sololatino se sirven a través del proxy del propio sitio
 (`/p.php?url=...&sig=...`) y las embebidas se pasan al extractor de
