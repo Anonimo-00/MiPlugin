@@ -110,7 +110,7 @@ class PelisPlusHDProvider : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val separator = if (request.data.contains("?")) "&" else "?"
         val document = app.get("$mainUrl/${request.data}${separator}page=$page").document
-        val hasNext = document.selectFirst("a[href*=?page=${page + 1}]") != null
+        val hasNext = document.selectFirst("a[href*=\"?page=${page + 1}\"]") != null
         return newHomePageResponse(
             list = HomePageList(
                 name = request.name,
@@ -134,12 +134,14 @@ class PelisPlusHDProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse? {
         val document = app.get(url).document
         val title = document.selectFirst("h1")?.text()?.trim() ?: return null
-        val poster = document.selectFirst("img[src^=/poster/]")?.attr("src")
-        val description = document.selectFirst("p.text-dark.font-size-13 + div.text-large")
-            ?.text()?.trim()
-            ?: document.selectFirst("div.text-large")?.text()?.trim()
+        val poster = document.selectFirst("img[src^=\"/poster/\"]")?.attr("src")
+        // La sinopsis es el bloque que va justo detras de la etiqueta "Sinopsis:".
+        val description = document.selectFirst("p.text-dark.font-size-13:containsOwn(Sinopsis)")
+            ?.nextElementSibling()
+            ?.text()
+            ?.trim()
         val score = document.selectFirst("span.ion-md-star")?.text()?.trim()?.toScore()
-        val tags = document.select("a[href^=/generos/][title]").map { it.text().trim() }.distinct()
+        val tags = document.select("a[href^=\"/generos/\"][title]").map { it.text().trim() }.distinct()
 
         var year: Int? = null
         val actors = mutableListOf<String>()
@@ -156,7 +158,7 @@ class PelisPlusHDProvider : MainAPI() {
             }
         }
 
-        val episodes = document.select("a.btn[href*=/temporada/][href*=/capitulo/]").mapIndexed { index, link ->
+        val episodes = document.select("a.btn[href*=\"/temporada/\"][href*=\"/capitulo/\"]").mapIndexed { index, link ->
             val href = link.attr("href")
             val season = Regex("/temporada/(\\d+)").find(href)?.groupValues?.get(1)?.toIntOrNull() ?: 1
             val episode = Regex("/capitulo/(\\d+)").find(href)?.groupValues?.get(1)?.toIntOrNull()
