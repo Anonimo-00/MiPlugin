@@ -3,11 +3,19 @@
 Extensiones de [CloudStream](https://github.com/recloudstream/cloudstream) para
 catálogos de streaming en español latino:
 
-| Extensión | Sitio | Contenido | Idioma |
+| Extensión | Sitio | Contenido | Tipo |
 |---|---|---|---|
 | `SoloLatinoProvider` | [sololatino.net](https://sololatino.net) | Películas, series, animes y doramas | es |
 | `FlixLatamProvider` | [flixlatam.com](https://flixlatam.com) | Películas, series y animes | es |
 | `PelisPlusHDProvider` | [pelisplushd.la](https://pelisplushd.la) | Películas, series y animes | es |
+| `GnulaProvider` | [gnula.la](https://gnula.la) | Películas, series y animes | es |
+| `VerGnulaProvider` | [ver.gnula.one](https://ver.gnula.one) | Películas | es |
+| `CinecalidadProvider` | [cinecalidad.org](https://cinecalidad.org) | Películas, series y animes | es |
+| `VerPeliculasUltraProvider` | [verpeliculasultra.com](https://verpeliculasultra.com) | Películas | es |
+| `FlixCornProvider` | [flixcorn.net](https://www.flixcorn.net) | Series y animes | es |
+| `AnimeOnlineProvider` | [animeonline.one](https://animeonline.one) | Animes | es |
+| `LatanimeProvider` | [latanime.org](https://latanime.org) | Animes | es |
+| `HackstoreProvider` | [hackstore.fo](https://www.hackstore.fo) | Películas (las series no tienen servidores) | es |
 
 > **Nota:** este repositorio se ha desarrollado **con ayuda de IA** (asistente
 > de programación). El código se ha ido verificando contra los sitios reales
@@ -33,36 +41,25 @@ repositorio y un workflow que publica los `.cs3` en la rama `builds`.
 ├── tools/verify.mjs              # Verificación en vivo contra los sitios reales
 ├── shared/                       # Código común a todos los proveedores
 │   └── src/main/kotlin/com/anonimo00/shared/
-│       └── Embed69.kt            # Reproductor EMBED69 + solver de Anubis
-├── SoloLatinoProvider/
-│   ├── build.gradle.kts          # Metadatos del proveedor (versión, status, tvTypes)
-│   └── src/main/
-│       ├── AndroidManifest.xml
-│       └── kotlin/com/anonimo00/sololatino/
-│           ├── SoloLatinoPlugin.kt    # Registro del proveedor en CloudStream
-│           ├── SoloLatinoProvider.kt  # Búsqueda, portada, ficha y enlaces
-│           ├── SoloLatinoPlayer.kt    # Resolución de enlaces (API + reproductor)
-│           └── SoloLatinoShield.kt    # SHA-256 del escudo y FNV-1a del sitio
-└── FlixLatamProvider/
-    ├── build.gradle.kts
-    └── src/main/
-        ├── AndroidManifest.xml
-        └── kotlin/com/anonimo00/flixlatam/
-            ├── FlixLatamPlugin.kt
-            ├── FlixLatamProvider.kt
-            └── FlixLatamPlayer.kt      # Delega en el reproductor EMBED69 común
-├── PelisPlusHDProvider/
-│   ├── build.gradle.kts
-│   └── src/main/
-│       ├── AndroidManifest.xml
-│       └── kotlin/com/anonimo00/pelisplushd/
-│           ├── PelisPlusHDPlugin.kt
-│           └── PelisPlusHDProvider.kt
+│       ├── Embed69.kt            # Reproductor EMBED69 + solver de Anubis
+│       ├── Vimeos.kt             # Reproductor vimeos (P.A.C.K.E.R)
+│       └── FastApiProvider.kt    # Base para las APIs de WordPress FastAPI
+├── SoloLatinoProvider/           # sololatino.net
+├── FlixLatamProvider/            # flixlatam.com
+├── PelisPlusHDProvider/          # pelisplushd.la
+├── GnulaProvider/                # gnula.la
+├── VerGnulaProvider/             # ver.gnula.one
+├── CinecalidadProvider/          # cinecalidad.org
+├── VerPeliculasUltraProvider/    # verpeliculasultra.com
+├── FlixCornProvider/             # flixcorn.net
+├── AnimeOnlineProvider/          # animeonline.one
+├── LatanimeProvider/             # latanime.org
+└── HackstoreProvider/            # hackstore.fo
 ```
 
 El código de `shared/` se incrusta en cada `.cs3` mediante
 `sourceSets["main"].java.srcDir("../shared/src/main/kotlin")`, así que los
-próximos proveedores reutilizarán el reproductor EMBED69 sin duplicar código.
+próximos proveedores reutilizarán los reproductores sin duplicar código.
 
 ## Importar en CloudStream
 
@@ -85,83 +82,65 @@ También funciona la de la rama principal:
 https://raw.githubusercontent.com/Anonimo-00/MiPlugin/master/repo.json
 ```
 
-Una vez añadido el repositorio, en la lista de extensiones aparecerán
-`SoloLatinoProvider` y `FlixLatamProvider` para instalar.
+Una vez añadido el repositorio, en la lista de extensiones aparecerán los once
+proveedores para instalar.
 
 ## Cuántas fuentes da cada sitio
 
-Los dos sitios ofrecen **varias fuentes por título**, no una sola:
+Los sitios ofrecen **varias fuentes por título**, no una sola:
 
 | Sitio | Fuentes por título | De dónde salen |
 |---|---|---|
 | sololatino.net | 2 HLS + 6 embebidas | `player.pelisserieshoy.com` (LAT y SUB) + `embed69.org` (LAT/SUB × 3 servidores) |
 | flixlatam.com | 6 embebidas | `dataLink` del reproductor EMBED69 (LAT/SUB × streamwish, voe, vidhide) |
 | pelisplushd.la | 3 embebidas | `li[data-url]` / `#link_url span[url]` (streamwish, vidhide, vidara) |
+| gnula.la | 1 por reproductor | `/wp-api/v1/player` → vimeos (P.A.C.K.E.R) |
+| cinecalidad.org | 2 por reproductor | `/wp-api/v1/player` → voe + vimeos |
+| ver.gnula.one | 3 embebidas | `a.gn-srv` → página intermedia → iframe (vidara, streamwish, vidhide) |
+| verpeliculasultra.com | 4 embebidas | `div.play-btn-cont[data-src]` (4 idiomas) → hgcloud.to (rotador) |
+| flixcorn.net | 1 por servidor | `/external/<id>` (JSON) → vidaraa.cc → `/api/stream` |
+| animeonline.one | 3 embebidas | `a.btn[data-hash]` (base64, sin cifrar) |
+| latanime.org | 7 embebidas | `a.play-video[data-player]` (base64, sin cifrar) |
+| hackstore.fo | 1 por reproductor | `a.playr[data-href]` → `play.php` → vimeos |
 
-Las HLS de sololatino se sirven a través del proxy del propio sitio
-(`/p.php?url=...&sig=...`) y las embebidas se pasan al extractor de
-CloudStream que toque (Voe, Streamwish, Vidhide...).
+## Protocolos que se resuelven
 
-## Cómo se extraen los enlaces
+### API de WordPress FastAPI (`gnula.la` y `cinecalidad.org`)
 
-### SoloLatino
+`/wp-api/v1/listing/{tipo}`, `/search`, `/single/{tipo}`, `/single/episodes/list`
+y `/player`. Ojo: el tramo `/listing/{x}` no filtra nada, el filtro real es el
+parámetro `postType`, así que hay que enviar los dos.
 
-El sitio usa un backend Laravel/Sanctum, así que el catálogo se lee del HTML
-público pero los enlaces de reproducción salen de su API:
+### Reproductor EMBED69 (`embed69.org`)
 
-1. `GET /sanctum/csrf-cookie` abre sesión y devuelve la cookie `XSRF-TOKEN`.
-2. `POST /api/player-url` con el token del botón de servidor. La petición va en
-   JSON y necesita la cabecera `X-SL-Render`, que el sitio calcula con
-   `sha256(token + ":" + minuto + ":sololatino_render_shield_2026")` truncado a
-   16 caracteres.
-3. El reproductor real es `player.pelisserieshoy.com`. Su página lleva el token
-   de sesión (`_t`), el identificador del contenido (`_qc`) y un token firmado
-   (`rt`) repartido en cuatro trozos que se recomponen en otro orden. La firma
-   `tk` es un FNV-1a de 32 bits.
-4. `POST /s.php` con `a=1` devuelve los servidores **agrupados por idioma**
-   (`langs_s`: `LAT` y `SUB`), `a=click` valida la reproducción y `a=2`
-   resuelve cada servidor a una URL HLS firmada (`sig`). Se resuelven **todos**
-   los idiomas, no solo el primero.
-5. El HLS se reproduce a través del proxy del propio sitio
-   (`/p.php?url=...&sig=...`): con un `Referer` de sololatino.net responde 403.
-6. El **segundo botón** de servidor apunta a `embed69.org`, que es un
-   reproductor EMBED69 protegido con **Anubis** (proof of work). `shared/Embed69.kt`
-   resuelve el reto (SHA-256 con los primeros bits a cero), saca las cookies
-   que dan acceso y descifra los enlaces AES de los servidores. Es una fuente
-   extra independiente de la de `pelisserieshoy`.
+`dataLink` en claro con los servidores por idioma; cada enlace va cifrado con
+AES-256-CBC y la clave es `SHA-256(LINK_CHALLENGE + LINK_SALT)`. Además
+`embed69.org` está protegido por **Anubis** (proof of work): `shared/Embed69.kt`
+resuelve el reto (SHA-256 con los primeros bits a cero), saca las cookies que
+dan acceso y descifra los enlaces.
 
-### FlixLatam
+### Reproductor vimeos (`vimeos.net`)
 
-El sitio usa el tema Dooplay, cuyo reproductor (`/vidurl/<id>/`) es una página
-de EMBED69 con los servidores embebidos en el HTML:
+La playlist va empaquetada con el packer de Dean Edwards en base 36. Se
+desempaqueta con el `getAndUnpack` de CloudStream y se extraen el m3u8 y los
+subtítulos (`.vtt`).
 
-1. `dataLink`: array JSON en claro con los servidores por idioma.
-2. `LINK_CHALLENGE` + `LINK_SALT` → `SHA-256(challenge + salt)` = clave AES.
-3. Cada enlace va cifrado en AES-256-CBC; los 16 primeros bytes del base64 son
-   el IV.
-4. Los enlaces resultantes (Voe, Streamwish, Vidhide…) se pasan al extractor
-   que CloudStream ya trae, normalizando beforehand los dominios rotados.
+### Rotador de dominio (`hgcloud.to`)
 
-### El reproductor EMBED69 (común a los dos)
-
-`shared/src/main/kotlin/com/anonimo00/shared/Embed69.kt` centraliza:
-
-- el descifrado AES-256-CBC de `dataLink`,
-- la normalización de dominios rotados (`hglink.to` → `streamwish.to`,
-  `morencius.com` → `vidhidepro.com`, …),
-- y el solver del proof of work de **Anubis**, con el que `embed69.org` bloquea
-  la página a los bots.
+Su `main.js` salta a uno de los dominios principales (`audinifer.com`,
+`hanerix.com`, `vibuxer.com`); en el dominio bueno ya viene la playlist
+empaquetada (`links.hls4`).
 
 ## Verificar los enlaces
 
-`tools/verify.mjs` reproduce la lógica de los dos proveedores contra los sitios
+`tools/verify.mjs` reproduce la lógica de los proveedores contra los sitios
 reales y comprueba que los enlaces resueltos devuelven una playlist HLS
 válida:
 
 ```bash
-node tools/verify.mjs            # ambos
+node tools/verify.mjs            # todos
 node tools/verify.mjs soloLatino
-node tools/verify.mjs flixlatam
+node tools/verify.mjs gnula
 ```
 
 ## Compilar localmente
@@ -180,8 +159,7 @@ En Linux o macOS:
 ./gradlew make makePluginsJson
 ```
 
-La salida queda en `SoloLatinoProvider/build/SoloLatinoProvider.cs3`,
-`FlixLatamProvider/build/FlixLatamProvider.cs3` y `build/plugins.json`.
+La salida queda en `<Módulo>/build/<Módulo>.cs3` y `build/plugins.json`.
 
 ## Sitios pendientes de añadir
 
@@ -192,36 +170,28 @@ proveedor), y después el catálogo, la búsqueda y la ficha.
 
 | # | Sitio | Estado |
 |---|---|---|
-| 1 | <https://pelisplushd.mx/> | Pendiente de investigar |
-| 2 | <https://verpeliculasultra.com/> | Pendiente de investigar |
-| 3 | <https://www.flixcorn.net/> | Pendiente de investigar |
-| 4 | <https://wnv5.gnula.cc/> | Pendiente de investigar |
-| 5 | <https://ver.gnula.one/> | Pendiente de investigar |
-| 6 | <https://www.hackstore.fo/> | Pendiente de investigar |
+| 1 | <https://pelisplushd.mx/> | Hecho (el sitio real es `pelisplushd.la`) |
+| 2 | <https://verpeliculasultra.com/> | Hecho |
+| 3 | <https://www.flixcorn.net/> | Hecho |
+| 4 | <https://wnv5.gnula.cc/> | Hecho (el sitio real es `gnula.la`) |
+| 5 | <https://ver.gnula.one/> | Hecho |
+| 6 | <https://www.hackstore.fo/> | Hecho |
 | 7 | <https://hackstore2.com/> | Pendiente de investigar |
-| 8 | <https://cinecalidad.org/> | Pendiente de investigar |
-| 9 | <https://ww4.animeonline.ninja/inicio/> | Pendiente de investigar |
+| 8 | <https://cinecalidad.org/> | Hecho |
+| 9 | <https://ww4.animeonline.ninja/inicio/> | Hecho (el sitio real es `animeonline.one`) |
 | 10 | <https://www.cinemultimediaflix.com/> | Pendiente de investigar |
-| 11 | <https://latanime.org/> | Pendiente de investigar |
-| 12 | <https://animejara.com/catalogo> | Pendiente de investigar |
+| 11 | <https://latanime.org/> | Hecho |
+| 12 | <https://animejara.com/catalogo> | Descartado: solo se abre con navegador (reto gestionado de Cloudflare) |
 | 13 | <https://serieslan.live/> | Pendiente de investigar |
+| 14 | <https://hdfull.to/> | Pendiente de investigar |
 
 Lista plana para trabajar:
 
 ```
-https://pelisplushd.mx/
-https://verpeliculasultra.com/
-https://www.flixcorn.net/
-https://wnv5.gnula.cc/
-https://ver.gnula.one/
-https://www.hackstore.fo/
 https://hackstore2.com/
-https://cinecalidad.org/
-https://ww4.animeonline.ninja/inicio/
 https://www.cinemultimediaflix.com/
-https://latanime.org/
-https://animejara.com/catalogo
 https://serieslan.live/
+https://hdfull.to/
 ```
 
 ## Nota

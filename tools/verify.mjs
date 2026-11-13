@@ -367,11 +367,382 @@ async function verifyPelisPlusHD() {
   }
 }
 
+// ------------------------------------------------------- API FastAPI (comun)
+
+const UNPACK = (packed) => {
+  const m = packed.match(/eval\(function\(p,a,c,k,e,(?:d|r)\)\{[\s\S]*?\}\('([\s\S]*?)',(\d+),(\d+),'([\s\S]*?)'\.split\('\|'\)\)/);
+  if (!m) return null;
+  const [, p, a, c, kTable] = m;
+  const radix = Number(a);
+  const count = Number(c);
+  const table = kTable.split("|");
+  const alphabet = "0123456789abcdefghijklmnopqrstuvwxyz";
+  const toBase = (n, r) => {
+    let s = "";
+    while (n > 0) { s = alphabet[n % r] + s; n = Math.floor(n / r); }
+    return s || "0";
+  };
+  let out = p;
+  for (let i = count - 1; i >= 0; i--) {
+    const token = toBase(i, radix);
+    if (!table[i]) continue;
+    out = out.replace(new RegExp("\\b" + token + "\\b", "g"), table[i]);
+  }
+  return out;
+};
+
+/** Resuelve un reproductor vimeos al m3u8. */
+async function vimeosM3u8(embedUrl, referer) {
+  const r = await fetch(embedUrl, { headers: { "User-Agent": UA, Referer: referer } });
+  const t = await r.text();
+  const unpacked = UNPACK(t);
+  if (!unpacked) return null;
+  const files = [...unpacked.matchAll(/file\s*:\s*"(https?:\/\/[^"]+)"/g)].map((m) => m[1]);
+  return files.find((f) => f.includes(".m3u8")) || null;
+}
+
+/** Comprueba que una playlist m3u8 responde con contenido. */
+async function checkPlaylist(url) {
+  const r = await fetch(url, { headers: { "User-Agent": UA } });
+  const t = await r.text();
+  return { ok: t.startsWith("#EXTM3U"), status: r.status, quality: t.match(/RESOLUTION=(\d+x\d+)/)?.[1] || "?" };
+}
+
+async function verifyFastApi(name, site, api, imageBase, typeOf) {
+  console.log(`\n== ${name} (${site}) ==`);
+  const get = async (u, h = {}) => {
+    const r = await fetch(u, { headers: { "User-Agent": UA, Accept: "application/json", ...h } });
+    return { s: r.status, t: await r.text() };
+  };
+
+  const list = await get(`${api}/listing/movies?page=1&orderBy=date&order=desc&postType=movies&postsPerPage=6`);
+  const listJson = JSON.parse(list.t);
+  const posts = listJson.data?.posts || [];
+  posts.length > 0 ? ok(`catalogo: ${posts.length} entradas (total ${listJson.data.pagination?.total})`) : fail("catalogo: sin entradas");
+
+  const search = await get(`${api}/search?q=matrix&postType=any&postsPerPage=6`);
+  const searchJson = JSON.parse(search.t);
+  const found = searchJson.data?.posts || [];
+  found.length > 0 ? ok(`busqueda: ${found.length} resultados para "matrix"`) : fail("busqueda: sin resultados");
+
+  const post = posts[0];
+  const slug = post.slug;
+  const single = await get(`${api}/single/movies?slug=${slug}&postType=movies`);
+  const singleJson = JSON.parse(single.t);
+  const detail = singleJson.data;
+  detail?.title ? ok(`ficha: "${detail.title}" (${detail.release_date?.slice(0, 4)}, poster ${detail.images?.poster ? "si" : "no"})`) : fail("ficha: sin datos");
+
+  // poster
+  const posterUrl = imageBase + (detail.images?.poster || "");
+  const pr = await fetch(posterUrl, { headers: { "User-Agent": UA } });
+  pr.status === 200 ? ok(`poster: ${posterUrl.slice(0, 80)} -> ${pr.status} ${pr.headers.get("content-type")}`) : fail(`poster: ${posterUrl.slice(0, 80)} -> ${pr.status}`);
+
+  // reproductor
+  const player = await get(`${api}/player?postId=${detail._id}&demo=0`);
+  const embeds = JSON.parse(player.t).data?.embeds || [];
+  if (embeds.length === 0) {
+    fail("reproductor: sin embeds");
+  } else {
+    ok(`reproductor: ${embeds.length} embeds (${embeds.map((e) => e.server + "/" + e.lang).join(", ")})`);
+    for (const e of embeds) {
+      if (!e.url?.includes("vimeos.net")) {
+        console.log(`  \u00b7 ${e.server}: ${e.url} (otro reproductor)`);
+        continue;
+      }
+      const m3u8 = await vimeosM3u8(e.url, site);
+      if (!m3u8) { fail(`  vimeos: no se pudo desempaquetar ${e.url}`); continue; }
+      const chk = await checkPlaylist(m3u8);
+      chk.ok ? ok(`  vimeos: playlist valida (${chk.quality}) ${m3u8.slice(0, 70)}`) : fail(`  vimeos: la playlist no es valida (${chk.status})`);
+    }
+  }
+
+  // episodios de una serie
+  if (typeOf === "tvshows") {
+    const shows = await get(`${api}/listing/tvshows?page=1&postType=tvshows&postsPerPage=2`);
+    const show = JSON.parse(shows.t).data.posts[0];
+    const eps = await get(`${api}/single/episodes/list?_id=${show._id}&season=1&page=1&postsPerPage=10`);
+    const epsJson = JSON.parse(eps.t);
+    const epsPosts = epsJson.data?.posts || [];
+    epsPosts.length > 0 ? ok(`serie "${show.title}": ${epsPosts.length} episodios (${epsJson.data.seasons?.join(",")})`) : fail("serie: sin episodios");
+  }
+}
+
+// --------------------------------------------------------------- AnimeOnline
+
+async function verifyAnimeOnline() {
+  console.log("\n== AnimeOnline (animeonline.one) ==");
+  const get = async (u, h = {}) => {
+    const r = await fetch(u, { headers: { "User-Agent": UA, ...h } });
+    return { s: r.status, url: r.url, t: await r.text() };
+  };
+  const home = await get("https://animeonline.one/");
+  const cards = (home.t.match(/class="flw-item/g) || []).length;
+  cards > 0 ? ok(`catalogo: ${cards} tarjetas`) : fail("catalogo: sin tarjetas");
+
+  const search = await get("https://animeonline.one/?s=naruto");
+  const found = (search.t.match(/class="flw-item/g) || []).length;
+  found > 0 ? ok(`busqueda: ${found} resultados para "naruto"`) : fail("busqueda: sin resultados");
+
+  const animeUrl = (home.t.match(/href="(https:\/\/animeonline\.one\/anime\/[^"]+)"/) || [])[1];
+  const an = await get(animeUrl);
+  const h1 = (an.t.match(/<h1[^>]*>([\s\S]{0,120}?)<\/h1>/) || [])[1]?.replace(/<[^>]+>/g, " ").trim();
+  h1 ? ok(`ficha: "${h1}"`) : fail("ficha: sin titulo");
+  const eps = [...new Set([...an.t.matchAll(/href="(https:\/\/animeonline\.one\/[^"]*-episode-\d+)\/"/g)].map((m) => m[1]))];
+  eps.length > 0 ? ok(`episodios: ${eps.length} (${eps[0]})`) : fail("episodios: ninguno");
+
+  const ep = await get(eps[0]);
+  const hashes = [...ep.t.matchAll(/class="btn"[^>]*data-hash="([^"]+)"/g)].map((m) => m[1]);
+  if (hashes.length === 0) {
+    fail("reproductor: sin servidores");
+  } else {
+    ok(`reproductor: ${hashes.length} servidores`);
+    for (const h of hashes) {
+      const url = Buffer.from(h, "base64").toString("utf8");
+      const res = await fetch(url, { headers: { "User-Agent": UA, Referer: eps[0] } }).catch(() => null);
+      const m3u8 = res ? [...new Set([...res.text().matchAll(/sources\s*:\s*\[\s*\{\s*file\s*:\s*['"]([^'"]+)['"]/g)].map((m) => m[1]))] : [];
+      console.log(`  \u00b7 ${url} (${res ? res.status : "sin respuesta"})${m3u8.length ? ` m3u8=${m3u8[0].slice(0, 70)}` : ""}`);
+      if (m3u8.length) {
+        const chk = await checkPlaylist(m3u8[0]);
+        chk.ok ? ok(`     playlist valida (${chk.quality})`) : fail(`     playlist no valida (${chk.status})`);
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------- Hackstore
+
+async function verifyHackstore() {
+  console.log("\n== Hackstore (hackstore.fo) ==");
+  const get = async (u, h = {}) => {
+    const r = await fetch(u, { headers: { "User-Agent": UA, ...h } });
+    return { s: r.status, url: r.url, t: await r.text() };
+  };
+  const cat = await get("https://www.hackstore.fo/peliculas");
+  const cards = (cat.t.match(/class="movie-thumbnail"/g) || []).length;
+  cards > 0 ? ok(`catalogo: ${cards} tarjetas`) : fail("catalogo: sin tarjetas");
+
+  const search = await get("https://www.hackstore.fo/?s=matrix");
+  const found = (search.t.match(/class="movie-thumbnail"/g) || []).length;
+  found > 0 ? ok(`busqueda: ${found} resultados para "matrix"`) : fail("busqueda: sin resultados");
+
+  const movieUrl = (cat.t.match(/href="(https:\/\/www\.hackstore\.fo\/peliculas\/[^"]+)\/"/) || [])[1];
+  const mv = await get(movieUrl);
+  const h1 = (mv.t.match(/<h1[^>]*>([\s\S]{0,120}?)<\/h1>/) || [])[1]?.replace(/<[^>]+>/g, " ").trim();
+  h1 ? ok(`ficha: "${h1}"`) : fail("ficha: sin titulo");
+
+  const playr = [...mv.t.matchAll(/<a[^>]*class="playr"[^>]*data-href="([^"]+)"/g)].map((m) => m[1]);
+  if (playr.length === 0) {
+    fail("reproductor: sin servidores");
+    return;
+  }
+  ok(`reproductor: ${playr.length} servidores`);
+  const play = await get("https://www.hackstore.fo" + playr[0].replace(/&amp;/g, "&"), { Referer: movieUrl });
+  const embed = play.t.match(/window\.location\.href\s*=\s*'([^']+)'/)?.[1];
+  embed ? ok(`  play.php -> ${embed}`) : fail("  play.php: no se encontro la url del reproductor");
+  if (embed?.includes("vimeos.net")) {
+    const m3u8 = await vimeosM3u8(embed, movieUrl);
+    if (m3u8) {
+      const chk = await checkPlaylist(m3u8);
+      chk.ok ? ok(`  vimeos: playlist valida (${chk.quality})`) : fail("  vimeos: playlist no valida");
+    } else fail("  vimeos: no se pudo desempaquetar");
+  }
+}
+
+// ------------------------------------------------------------ Ver.Gnula.One
+
+async function verifyVerGnula() {
+  console.log("\n== Gnula .one (ver.gnula.one) ==");
+  const get = async (u, h = {}) => {
+    const r = await fetch(u, { headers: { "User-Agent": UA, ...h } });
+    return { s: r.status, url: r.url, t: await r.text() };
+  };
+  const cat = await get("https://ver.gnula.one/peliculas/");
+  const cards = (cat.t.match(/gn-card gn-card--grid/g) || []).length;
+  cards > 0 ? ok(`catalogo: ${cards} tarjetas`) : fail("catalogo: sin tarjetas");
+
+  const sug = await get("https://ver.gnula.one/wp-json/gnula/v1/suggest?q=matrix");
+  let n = 0;
+  try { n = JSON.parse(sug.t).length; } catch {}
+  n > 0 ? ok(`busqueda (endpoint de sugerencias): ${n} resultados para "matrix"`) : fail("busqueda: sin resultados");
+
+  const movieUrl = (cat.t.match(/href="(https:\/\/ver\.gnula\.one\/movies\/[^"]+)\/"/) || [])[1];
+  const mv = await get(movieUrl);
+  const srv = [...mv.t.matchAll(/<a[^>]*class="gn-srv"[^>]*href="([^"]+)"/g)].map((m) => m[1]);
+  if (srv.length === 0) {
+    fail("reproductor: sin servidores");
+    return;
+  }
+  ok(`reproductor: ${srv.length} servidores`);
+  for (const href of srv.slice(0, 3)) {
+    const res = await get(href.replace(/&#038;/g, "&").replace(/&amp;/g, "&"), { Referer: movieUrl });
+    const iframe = res.t.match(/<iframe[^>]*src="([^"]+)"/)?.[1];
+    iframe ? ok(`  ${href.slice(0, 60)} -> ${iframe.slice(0, 70)}`) : fail(`  ${href.slice(0, 60)} -> sin iframe`);
+  }
+}
+
+// ------------------------------------------------------ VerPeliculasUltra
+
+async function verifyVerPeliculasUltra() {
+  console.log("\n== VerPeliculasUltra (verpeliculasultra.com) ==");
+  const get = async (u, h = {}) => {
+    const r = await fetch(u, { headers: { "User-Agent": UA, ...h }, redirect: "follow" });
+    return { s: r.status, url: r.url, t: await r.text() };
+  };
+  const cat = await get("https://verpeliculasultra.com/lastnews/");
+  const cards = (cat.t.match(/class="shortf"/g) || []).length;
+  cards > 0 ? ok(`catalogo: ${cards} tarjetas`) : fail("catalogo: sin tarjetas");
+
+  const search = await get("https://verpeliculasultra.com/index.php?do=search&subaction=search&story=dune");
+  const found = (search.t.match(/class="shortf"/g) || []).length;
+  found > 0 ? ok(`busqueda: ${found} resultados para "dune"`) : fail("busqueda: sin resultados");
+
+  const movieUrl = (cat.t.match(/<div class="shortf-img">\s*<a href="([^"]+)"/) || [])[1];
+  const mv = await get(movieUrl, { Referer: "https://verpeliculasultra.com/" });
+  const h1 = (mv.t.match(/<h1[^>]*>([\s\S]{0,160}?)<\/h1>/) || [])[1]?.replace(/<[^>]+>/g, " ").trim();
+  h1 ? ok(`ficha: "${h1}"`) : fail("ficha: sin titulo");
+
+  const servers = [...new Set([...mv.t.matchAll(/<div class="[^"]*play-btn-cont"[^>]*data-src="([^"]+)"/g)].map((m) => m[1]))];
+  if (servers.length === 0) {
+    fail("reproductor: sin servidores");
+    return;
+  }
+  ok(`reproductor: ${servers.length} servidores`);
+  const hg = servers.find((s) => s.includes("hgcloud"));
+  if (!hg) {
+    console.log("  (sin familia hgcloud)");
+    return;
+  }
+  const id = hg.split("/e/")[1];
+  for (const domain of ["audinifer.com", "hanerix.com", "vibuxer.com"]) {
+    const p = await get(`https://${domain}/e/${id}`, { Referer: "https://verpeliculasultra.com/" });
+    const unpacked = UNPACK(p.t);
+    if (!unpacked) continue;
+    const links = {};
+    for (const m of unpacked.matchAll(/"(hls\d)":"([^"]*)"/g)) links[m[1]] = m[2];
+    const pick = links.hls4 || links.hls3 || links.hls2;
+    if (!pick) continue;
+    const full = pick.startsWith("http") ? pick : `https://${domain}${pick}`;
+    const chk = await checkPlaylist(full);
+    chk.ok ? ok(`  hgcloud -> ${domain}: playlist valida (${chk.quality})`) : fail(`  hgcloud -> ${domain}: playlist no valida (${chk.status})`);
+    break;
+  }
+}
+
+// -------------------------------------------------------------- FlixCorn
+
+async function verifyFlixCorn() {
+  console.log("\n== FlixCorn (flixcorn.net) ==");
+  const get = async (u, h = {}) => {
+    const r = await fetch(u, { headers: { "User-Agent": UA, ...h }, redirect: "follow" });
+    return { s: r.status, url: r.url, t: await r.text() };
+  };
+  const cat = await get("https://www.flixcorn.net/tendencias");
+  const cards = (cat.t.match(/media-card/g) || []).length;
+  cards > 0 ? ok(`catalogo: ${cards} tarjetas`) : fail("catalogo: sin tarjetas");
+
+  const search = await get("https://www.flixcorn.net/search?q=lupin");
+  const found = (search.t.match(/media-card/g) || []).length;
+  found > 0 ? ok(`busqueda: ${found} resultados para "lupin"`) : fail("busqueda: sin resultados");
+
+  const serieUrl = (cat.t.match(/href="(\/serie\/[^"]+\.html)"/) || [])[1];
+  const se = await get("https://www.flixcorn.net" + serieUrl);
+  const title = (se.t.match(/<h1[^>]*>([\s\S]{0,120}?)<\/h1>/) || [])[1]?.replace(/<[^>]+>/g, " ").trim();
+  title ? ok(`serie: "${title}" (${serieUrl})`) : fail("serie: sin titulo");
+  const seasons = [...new Set([...se.t.matchAll(/href="(\/serie\/[^"]*\/temporada-\d+\.html)"/g)].map((m) => m[1]))];
+  seasons.length > 0 ? ok(`temporadas: ${seasons.length} (${seasons[0]})`) : fail("temporadas: ninguna");
+
+  const seasonPage = await get("https://www.flixcorn.net" + (seasons[0] || serieUrl));
+  const epUrl = (seasonPage.t.match(/href="(\/ver\/[^"]+capitulo-\d+\.html)"/) || [])[1];
+  if (!epUrl) { fail("episodio: no encontrado"); return; }
+  const ep = await get("https://www.flixcorn.net" + epUrl);
+  const rows = [...ep.t.matchAll(/<div class="cap-server-row">([\s\S]*?)<\/div>\s*<\/div>/g)];
+  const seen = new Set();
+  const servers = rows
+    .map((m) => ({
+      name: m[1].match(/class="cap-server-name">([^<]*)</)?.[1],
+      ext: m[1].match(/href="(\/external\/[^"]+)"/)?.[1],
+    }))
+    .filter((s) => s.ext && !seen.has(s.ext) && seen.add(s.ext));
+  ok(`episodio ${epUrl}: ${servers.length} servidores`);
+  for (const m of servers.slice(0, 4)) {
+    const name = m.name;
+    const ext = m.ext;
+    if (!ext) continue;
+    const ex = await get("https://www.flixcorn.net" + ext, { "X-Requested-With": "XMLHttpRequest", Referer: "https://www.flixcorn.net" + epUrl });
+    let json = null;
+    try { json = JSON.parse(ex.t); } catch {}
+    if (json?.url) {
+      console.log(`  \u00b7 ${name}: ${json.url}`);
+      if (json.url.includes("vidara")) {
+        const fileCode = json.url.split("/e/").pop().split("?")[0];
+        const st = await fetch("https://vidaraa.cc/api/stream", {
+          method: "POST",
+          headers: { "User-Agent": UA, "Content-Type": "application/json", Referer: json.url },
+          body: JSON.stringify({ filecode: fileCode, device: "web", codecs: [] }),
+        });
+        const sj = await st.json().catch(() => null);
+        const m3u8 = sj?.streaming_url;
+        if (m3u8) {
+          const chk = await checkPlaylist(m3u8);
+          chk.ok ? ok(`     vidara: playlist valida (${chk.quality})`) : fail(`     vidara: playlist no valida (${chk.status})`);
+        } else fail("     vidara: sin streaming_url");
+      }
+    } else {
+      console.log(`  \u00b7 ${name}: ${ex.t.slice(0, 60)}`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------- Latanime
+
+async function verifyLatanime() {
+  console.log("\n== Latanime (latanime.org) ==");
+  const get = async (u, h = {}) => {
+    const r = await fetch(u, { headers: { "User-Agent": UA, ...h }, redirect: "follow" });
+    return { s: r.status, url: r.url, t: await r.text() };
+  };
+  const cat = await get("https://latanime.org/animes");
+  const cards = (cat.t.match(/div class="series"/g) || []).length;
+  cards > 0 ? ok(`catalogo: ${cards} tarjetas`) : fail("catalogo: sin tarjetas");
+
+  const search = await get("https://latanime.org/buscar?q=black");
+  const found = (search.t.match(/div class="series"/g) || []).length;
+  found > 0 ? ok(`busqueda: ${found} resultados para "black"`) : fail("busqueda: sin resultados");
+
+  const animeUrl = (cat.t.match(/href="(https:\/\/latanime\.org\/anime\/[^"]+)"/) || [])[1];
+  const an = await get(animeUrl);
+  const title = (an.t.match(/<h2[^>]*>([\s\S]{0,120}?)<\/h2>/) || [])[1]?.replace(/<[^>]+>/g, " ").trim();
+  title ? ok(`anime: "${title}"`) : fail("anime: sin titulo");
+  const eps = [...new Set([...an.t.matchAll(/href="(https:\/\/latanime\.org\/ver\/[^"]+)"/g)].map((m) => m[1]))];
+  eps.length > 0 ? ok(`episodios: ${eps.length} (${eps[0]})`) : fail("episodios: ninguno");
+
+  if (eps.length) {
+    const ep = await get(eps[0]);
+    const players = [...ep.t.matchAll(/class="play-video[^"]*"[^>]*data-player="([^"]+)"/g)].map((m) => m[1]);
+    if (players.length === 0) {
+      fail("reproductor: sin servidores");
+    } else {
+      ok(`reproductor: ${players.length} servidores`);
+      for (const p of players.slice(0, 5)) console.log(`  \u00b7 ${Buffer.from(p, "base64").toString("utf8")}`);
+    }
+  }
+}
+
 // --------------------------------------------------------------------- main
 
 const which = process.argv[2] || "ambos";
 if (which === "soloLatino" || which === "ambos") await verifySoloLatino();
 if (which === "flixlatam" || which === "ambos") await verifyFlixLatam();
 if (which === "pelisplushd" || which === "ambos") await verifyPelisPlusHD();
+if (which === "gnula" || which === "ambos")
+  await verifyFastApi("Gnula", "https://gnula.la", "https://gnula.la/wp-api/v1", "https://gnula.la/wp-content/uploads", "tvshows");
+if (which === "cinecalidad" || which === "ambos")
+  await verifyFastApi("Cinecalidad", "https://cinecalidad.org", "https://cinecalidad.org/wp-api/v1", "https://cinecalidad.org/wp-content/uploads", "tvshows");
+if (which === "animeonline" || which === "ambos") await verifyAnimeOnline();
+if (which === "hackstore" || which === "ambos") await verifyHackstore();
+if (which === "gnulaone" || which === "ambos") await verifyVerGnula();
+if (which === "verpeliculasultra" || which === "ambos") await verifyVerPeliculasUltra();
+if (which === "flixcorn" || which === "ambos") await verifyFlixCorn();
+if (which === "latanime" || which === "ambos") await verifyLatanime();
 console.log(failed ? "\nFALLOS" : "\nTODO CORRECTO");
 process.exitCode = failed ? 1 : 0;
