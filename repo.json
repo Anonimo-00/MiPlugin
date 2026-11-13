@@ -1,6 +1,7 @@
 {
   "name": "Proveedor Latinos",
   "description": "Extensiones de CloudStream para sololatino.net y flixlatam.com",
+  "iconUrl": "https://sololatino.net/wp-content/uploads/2020/10/cropped-logo-final-192x192.png",
   "manifestVersion": 1,
   "pluginLists": [
     "https://raw.githubusercontent.com/Anonimo-00/MiPlugin/builds/plugins.json"

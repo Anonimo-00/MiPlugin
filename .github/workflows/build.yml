@@ -53,6 +53,9 @@ jobs:
           ./gradlew make makePluginsJson
           find . -path '*/build/*.cs3' -exec cp {} $GITHUB_WORKSPACE/builds/ \;
           cp build/plugins.json $GITHUB_WORKSPACE/builds
+          # El manifiesto del repositorio tambien se publica en la rama builds
+          # para poder pegar esa URL en CloudStream -> Añadir repositorio.
+          cp repo.json $GITHUB_WORKSPACE/builds
 
       - name: Push builds
         run: |
