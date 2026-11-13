@@ -50,14 +50,24 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/src
           chmod +x gradlew
-          # Los errores se sacan como anotaciones para poder leerlos sin
-          # iniciar sesion en GitHub.
-          ./gradlew make makePluginsJson 2>&1 | tee gradle-build.log || {
-            grep -E "^e: |error:|FAILURE|What went wrong|^> " gradle-build.log | head -30 | while read -r line; do
+          set -o pipefail
+          # El plugin de CloudStream se resuelve como -SNAPSHOT desde jitpack y
+          # puntualmente falla de forma transitoria, asi que se reintenta.
+          for attempt in 1 2 3; do
+            if ./gradlew make makePluginsJson 2>&1 | tee gradle-build.log; then
+              break
+            fi
+            echo "::warning::Gradle fallo en el intento $attempt, se reintenta en 45 s"
+            sleep 45
+          done
+          if ! grep -q "BUILD SUCCESSFUL" gradle-build.log; then
+            # Los errores se sacan como anotaciones para poder leerlos sin
+            # iniciar sesion en GitHub.
+            grep -E "^e: |error:|FAILURE|What went wrong" gradle-build.log | head -30 | while read -r line; do
               echo "::error::$line"
             done
             exit 1
-          }
+          fi
           find . -path '*/build/*.cs3' -exec cp {} $GITHUB_WORKSPACE/builds/ \;
           cp build/plugins.json $GITHUB_WORKSPACE/builds
           # El manifiesto del repositorio tambien se publica en la rama builds
