@@ -50,7 +50,14 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/src
           chmod +x gradlew
-          ./gradlew make makePluginsJson
+          # Los errores se sacan como anotaciones para poder leerlos sin
+          # iniciar sesion en GitHub.
+          ./gradlew make makePluginsJson 2>&1 | tee gradle-build.log || {
+            grep -E "^e: |error:|FAILURE|What went wrong|^> " gradle-build.log | head -30 | while read -r line; do
+              echo "::error::$line"
+            done
+            exit 1
+          }
           find . -path '*/build/*.cs3' -exec cp {} $GITHUB_WORKSPACE/builds/ \;
           cp build/plugins.json $GITHUB_WORKSPACE/builds
           # El manifiesto del repositorio tambien se publica en la rama builds
