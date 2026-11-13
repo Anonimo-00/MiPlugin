@@ -1,16 +1,29 @@
 package com.anonimo00.sololatino
 
+import com.anonimo00.shared.Embed69
 import com.lagradost.cloudstream3.app
 import com.lagradost.nicehttp.JsonAsString
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.net.URLEncoder
 
+/** Tipo de enlace resuelto. */
+internal enum class SoloLatinoKind {
+    /** Playlist HLS directa (ya resuelta por el proxy del sitio). */
+    HLS,
+
+    /** Video en un solo archivo. */
+    MP4,
+
+    /** Reproductor externo (Voe, Streamwish, Vidhide...) que resuelve CloudStream. */
+    EMBED,
+}
+
 /** Enlace de streaming ya resuelto y listo para reproducirse. */
 internal data class SoloLatinoLink(
     val name: String,
     val url: String,
-    val isM3u8: Boolean,
+    val kind: SoloLatinoKind,
     val referer: String?,
 )
 
@@ -32,11 +45,17 @@ internal data class SoloLatinoLink(
  *
  *  3. `POST /s.php` con `a=1` devuelve los servidores disponibles, `a=click`
  *     valida la reproduccion y `a=2` resuelve cada servidor a una url m3u8
- *     firmada (`sig`).
+ *     firmada (`sig`). Los servidores vienen agrupados por idioma
+ *     (`langs_s`), asi que se resuelven tanto la version latino como la
+ *     subtitulada.
  *
  *  4. El m3u8 se reproduce a traves del proxy del propio sitio
  *     (`/p.php?url=...&sig=...`), que es el unico que acepta las peticiones:
  *     con un `Referer` de sololatino.net responde 403.
+ *
+ * El segundo boton de servidor apunta a `embed69.org`, que es el reproductor
+ * EMBED69 protegido con Anubis (proof of work) y del que se sacan fuentes
+ * adicionales (ver [Embed69]).
  */
 internal object SoloLatinoPlayer {
     private const val BASE = "https://sololatino.net"
@@ -116,13 +135,16 @@ internal object SoloLatinoPlayer {
         val type = json.optString("type")
         return when {
             type == "mp4" && url.isNotBlank() -> listOf(
-                SoloLatinoLink("Video", url, isM3u8 = false, referer = pageUrl)
+                SoloLatinoLink("Video", url, SoloLatinoKind.MP4, referer = pageUrl)
             )
 
             url.contains("pelisserieshoy") -> resolvePlayer(url, pageUrl)
 
-            // El resto de reproductores (embed69.org) estan protegidos con
-            // Anubis (proof of work) y no se pueden resolver de forma fiable.
+            // Segundo boton: reproductor EMBED69 (protegido con Anubis).
+            url.contains("embed69") -> Embed69.resolve(url, pageUrl).map {
+                SoloLatinoLink(it.name, it.url, SoloLatinoKind.EMBED, referer = it.referer)
+            }
+
             else -> emptyList()
         }
     }
@@ -165,48 +187,72 @@ internal object SoloLatinoPlayer {
         val list = runCatching { JSONObject(playerPost(headers, mapOf("a" to "1") + common)) }
             .getOrNull()
             ?: return emptyList()
-        val servers = list.optJSONArray("s") ?: return emptyList()
 
         // El sitio marca la reproduccion como iniciada antes de resolver el servidor.
         playerPost(headers, mapOf("a" to "click", "ts" to "1") + common)
 
         val links = LinkedHashMap<String, SoloLatinoLink>()
-        for (index in 0 until servers.length()) {
-            val server = servers.optJSONArray(index) ?: continue
-            val label = server.optString(0)
-            val id = server.optString(1)
-            if (id.isBlank()) continue
+        for ((language, servers) in serversByLanguage(list)) {
+            for (index in 0 until servers.length()) {
+                val server = servers.optJSONArray(index) ?: continue
+                val label = server.optString(0)
+                val id = server.optString(1)
+                if (id.isBlank()) continue
 
-            val resolved = runCatching {
-                JSONObject(playerPost(headers, mapOf("a" to "2", "v" to id) + common))
-            }.getOrNull() ?: continue
+                val resolved = runCatching {
+                    JSONObject(playerPost(headers, mapOf("a" to "2", "v" to id) + common))
+                }.getOrNull() ?: continue
 
-            val type = resolved.optString("type")
-            val direct = resolved.optString("u")
-            val signature = resolved.optString("sig")
-            when {
-                // Reproductor embebido: el propio sitio lo mete en un iframe.
-                type == "iframe" && resolved.optString("url").isNotBlank() -> links.putIfAbsent(
-                    resolved.optString("url"),
-                    SoloLatinoLink(
-                        label,
+                val type = resolved.optString("type")
+                val direct = resolved.optString("u")
+                val signature = resolved.optString("sig")
+                when {
+                    // Reproductor embebido: el propio sitio lo mete en un iframe.
+                    type == "iframe" && resolved.optString("url").isNotBlank() -> links.putIfAbsent(
                         resolved.optString("url"),
-                        isM3u8 = false,
-                        referer = playerUrl,
-                    ),
-                )
-
-                // Playlist HLS firmada: hay que pasar por el proxy del sitio.
-                direct.startsWith("http") -> {
-                    val proxy = "$PLAYER/p.php?url=${encode(direct)}&sig=${encode(signature)}"
-                    links.putIfAbsent(
-                        proxy,
-                        SoloLatinoLink(label, proxy, isM3u8 = true, referer = playerUrl),
+                        SoloLatinoLink(
+                            "$language [$label]",
+                            resolved.optString("url"),
+                            SoloLatinoKind.MP4,
+                            referer = playerUrl,
+                        ),
                     )
+
+                    // Playlist HLS firmada: hay que pasar por el proxy del sitio.
+                    direct.startsWith("http") -> {
+                        val proxy = "$PLAYER/p.php?url=${encode(direct)}&sig=${encode(signature)}"
+                        links.putIfAbsent(
+                            proxy,
+                            SoloLatinoLink(
+                                "$language [$label]",
+                                proxy,
+                                SoloLatinoKind.HLS,
+                                referer = playerUrl,
+                            ),
+                        )
+                    }
                 }
             }
         }
         return links.values.toList()
+    }
+
+    /**
+     * Servidores agrupados por idioma. El sitio los publica en `langs_s`
+     * (por ejemplo `LAT` y `SUB`); si no, se usa la lista por defecto `s`.
+     */
+    private fun serversByLanguage(list: JSONObject): Map<String, org.json.JSONArray> {
+        val languages = list.optJSONObject("langs_s")
+        if (languages != null && languages.length() > 0) {
+            val result = LinkedHashMap<String, org.json.JSONArray>()
+            for (key in languages.keys()) {
+                val servers = languages.optJSONArray(key) ?: continue
+                result[key] = servers
+            }
+            if (result.isNotEmpty()) return result
+        }
+        val fallback = list.optJSONArray("s") ?: return emptyMap()
+        return mapOf("LAT" to fallback)
     }
 
     /** POST del reproductor con cuerpo de formulario. */

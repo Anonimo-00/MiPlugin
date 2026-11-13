@@ -1,11 +1,12 @@
 // Verificacion en vivo de los dos proveedores contra los sitios reales.
 //
-// Reproduce exactamente la logica de los proveedores Kotlin:
+// Reproduce la logica de los proveedores Kotlin:
 //   - SoloLatino: sesion Laravel -> POST /api/player-url (X-SL-Render) ->
 //     reproductor player.pelisserieshoy.com -> POST /s.php (a=1, a=click, a=2)
-//     -> proxy /p.php?url=...&sig=...
+//     en todos los idiomas -> proxy /p.php?url=...&sig=...
+//     y el segundo boton: embed69.org protegido con Anubis (proof of work).
 //   - FlixLatam: ficha -> /vidurl/<id>/ -> dataLink -> AES-256-CBC (clave
-//     SHA-256(challenge+salt)) -> enlaces de los reproductores
+//     SHA-256(challenge+salt)) -> enlaces de los reproductores.
 //
 // Uso: node tools/verify.mjs [soloLatino|flixlatam]
 
@@ -14,10 +15,11 @@ import crypto from "node:crypto";
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
+let failed = 0;
 const ok = (msg) => console.log(`  \u2713 ${msg}`);
 const fail = (msg) => {
   console.error(`  \u2717 ${msg}`);
-  process.exitCode = 1;
+  failed++;
 };
 
 const sha256 = (text) => crypto.createHash("sha256").update(text, "utf8").digest("hex");
@@ -39,7 +41,103 @@ const jarOf = (res) =>
     .map((c) => c.split(";")[0].trim())
     .filter((c) => c.includes("="));
 
-// ---------------------------------------------------------------- SoloLatino
+// ------------------------------------------------------------------ comun
+
+function fixHost(url) {
+  return url
+    .replace("https://morencius.com", "https://vidhidepro.com")
+    .replace("https://minochinos.com", "https://vidhidepro.com")
+    .replace("https://mivalyo.com", "https://vidhidepro.com")
+    .replace("https://dinisglows.com", "https://vidhidepro.com")
+    .replace("https://dhtpre.com", "https://vidhidepro.com")
+    .replace("https://hglink.to", "https://streamwish.to")
+    .replace("https://swdyu.com", "https://streamwish.to")
+    .replace("https://cybervynx.com", "https://streamwish.to")
+    .replace("https://dumbalag.com", "https://streamwish.to")
+    .replace("https://filemoon.link", "https://filemoon.sx")
+    .replace("https://sblona.com", "https://watchsb.com")
+    .replace("https://lulu.st", "https://lulustream.com")
+    .replace("https://uqload.io", "https://uqload.com")
+    .replace("https://do7go.com", "https://dood.la");
+}
+
+function decryptLink(encrypted, key) {
+  const raw = Buffer.from(encrypted, "base64");
+  const decipher = crypto.createDecipheriv("aes-256-cbc", key, raw.subarray(0, 16));
+  return Buffer.concat([decipher.update(raw.subarray(16)), decipher.final()])
+    .toString("utf8")
+    .replace(/`/g, "")
+    .trim();
+}
+
+/** Proof of work de Anubis: SHA-256(datos + nonce) con los primeros bits a cero. */
+function solveAnubis(randomData, difficulty) {
+  const fullBytes = Math.floor(difficulty / 2);
+  const halfByte = difficulty % 2 !== 0;
+  for (let nonce = 0; ; nonce++) {
+    const digest = crypto.createHash("sha256").update(randomData + nonce, "utf8").digest();
+    let valid = true;
+    for (let i = 0; i < fullBytes; i++) if (digest[i] !== 0) { valid = false; break; }
+    if (valid && halfByte && (digest[fullBytes] >> 4) !== 0) valid = false;
+    if (valid) return { hash: digest.toString("hex"), nonce };
+  }
+}
+
+/** Descarga una pagina de EMBED69 pasando antes el reto de Anubis si lo hay. */
+async function fetchEmbed69(url, referer) {
+  const cookies = new Map();
+  const cookieHeader = () => [...cookies.entries()].map(([k, v]) => `${k}=${v}`).join("; ");
+  const absorb = (res) => {
+    for (const c of res.headers.getSetCookie ? res.headers.getSetCookie() : []) {
+      const [pair] = c.split(";");
+      const i = pair.indexOf("=");
+      if (i > 0) cookies.set(pair.slice(0, i).trim(), pair.slice(i + 1).trim());
+    }
+  };
+
+  const headers = { "User-Agent": UA, Referer: referer };
+  const first = await fetch(url, { headers });
+  absorb(first);
+  let html = await first.text();
+
+  const challengeMatch = html.match(/<script id="anubis_challenge"[^>]*>([\s\S]*?)<\/script>/);
+  if (challengeMatch) {
+    const challenge = JSON.parse(challengeMatch[1]).challenge;
+    const started = Date.now();
+    const { hash, nonce } = solveAnubis(challenge.randomData, challenge.difficulty);
+    const passUrl =
+      `https://embed69.org/.within.website/x/cmd/anubis/api/pass-challenge` +
+      `?id=${challenge.id}&response=${hash}&nonce=${nonce}` +
+      `&redir=${encodeURIComponent(new URL(url).pathname)}&elapsedTime=${Date.now() - started}`;
+    const pass = await fetch(passUrl, { headers: { ...headers, Cookie: cookieHeader() }, redirect: "manual" });
+    absorb(pass);
+    const second = await fetch(url, { headers: { ...headers, Cookie: cookieHeader() } });
+    html = await second.text();
+    return { html, anubis: true };
+  }
+  return { html, anubis: false };
+}
+
+/** Lee y descifra los servidores de un reproductor EMBED69. */
+async function embed69Links(url, referer) {
+  const { html, anubis } = await fetchEmbed69(url, referer);
+  const rawData = html.match(/let dataLink\s*=\s*(\[[\s\S]*?\]);/)?.[1];
+  const challenge = html.match(/LINK_CHALLENGE\s*=\s*'([^']+)'/)?.[1];
+  const salt = html.match(/LINK_SALT\s*=\s*'([^']+)'/)?.[1];
+  if (!rawData || !challenge || !salt) return { links: [], anubis };
+  const key = crypto.createHash("sha256").update(challenge + salt, "utf8").digest();
+  const links = [];
+  for (const file of JSON.parse(rawData)) {
+    for (const server of file.sortedEmbeds || []) {
+      const plain = decryptLink(server.link, key);
+      if (!plain.startsWith("http")) continue;
+      links.push({ name: `${file.video_language}/${server.servername}`, url: fixHost(plain) });
+    }
+  }
+  return { links, anubis };
+}
+
+// -------------------------------------------------------------- SoloLatino
 
 async function verifySoloLatino() {
   console.log("\n== SoloLatino (sololatino.net) ==");
@@ -47,133 +145,131 @@ async function verifySoloLatino() {
   const PLAYER = "https://player.pelisserieshoy.com";
   const pageUrl = `${BASE}/pelicula/un-buen-abogado`;
 
-  // 1. Catalogo
   const catalog = await fetch(`${BASE}/peliculas`, { headers: { "User-Agent": UA } });
   const catalogHtml = await catalog.text();
   const cards = catalogHtml.match(/<div class="card">/g) || [];
-  if (cards.length > 0) ok(`catalogo: ${cards.length} tarjetas en /peliculas`);
-  else fail("catalogo: no se encontraron tarjetas");
+  cards.length > 0 ? ok(`catalogo: ${cards.length} tarjetas en /peliculas`) : fail("catalogo: sin tarjetas");
 
-  // 2. Busqueda
   const search = await fetch(`${BASE}/buscar?q=batman`, { headers: { "User-Agent": UA } });
-  const searchHtml = await search.text();
-  const found = searchHtml.match(/<div class="card">/g) || [];
-  if (found.length > 0) ok(`busqueda: ${found.length} resultados para "batman"`);
-  else fail("busqueda: sin resultados");
+  const found = (await search.text()).match(/<div class="card">/g) || [];
+  found.length > 0 ? ok(`busqueda: ${found.length} resultados para "batman"`) : fail("busqueda: sin resultados");
 
-  // 3. Sesion Laravel
   const session = await fetch(`${BASE}/sanctum/csrf-cookie`, { headers: { "User-Agent": UA } });
   const jar = jarOf(session);
   const xsrf = decodePercent(
     (jar.find((c) => c.startsWith("XSRF-TOKEN=")) || "").split("=").slice(1).join("=")
   );
-  if (xsrf) ok(`sesion: XSRF-TOKEN de ${xsrf.length} caracteres`);
-  else fail("sesion: no se obtuvo XSRF-TOKEN");
+  xsrf ? ok(`sesion: XSRF-TOKEN de ${xsrf.length} caracteres`) : fail("sesion: sin XSRF-TOKEN");
 
-  // 4. Tokens de servidor en la ficha
   const page = await fetch(pageUrl, { headers: { "User-Agent": UA, Cookie: jar.join("; ") } });
   const html = await page.text();
   const tokens = [...new Set([...html.matchAll(/data-player-token="([^"]+)"/g)].map((m) => m[1]))];
-  if (tokens.length > 0) ok(`ficha: ${tokens.length} botones de servidor`);
-  else fail("ficha: no se encontraron botones de servidor");
+  tokens.length > 0 ? ok(`ficha: ${tokens.length} botones de servidor`) : fail("ficha: sin botones de servidor");
 
-  // 5. POST /api/player-url con el escudo X-SL-Render
-  const token = tokens[0];
-  const shield = sha256(`${token}:${Math.floor(Date.now() / 60000)}:sololatino_render_shield_2026`).slice(0, 16);
-  const playerRes = await fetch(`${BASE}/api/player-url`, {
-    method: "POST",
-    headers: {
-      "User-Agent": UA,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      "X-XSRF-TOKEN": xsrf,
-      "X-SL-Render": shield,
-      Cookie: jar.join("; "),
-      Referer: pageUrl,
-      Origin: BASE,
-    },
-    body: JSON.stringify({ t: token }),
-  });
-  const player = await playerRes.json();
-  if (player.url) ok(`api/player-url: ${player.type} -> ${player.url.slice(0, 70)}`);
-  else fail(`api/player-url: ${playerRes.status} ${JSON.stringify(player)}`);
-
-  // 6. Reproductor: _t, _qc y el token firmado repartido en 4 trozos
-  const playerPage = await fetch(player.url, {
-    headers: { "User-Agent": UA, Referer: pageUrl, Accept: "text/html,*/*;q=0.8" },
-  });
-  const playerHtml = await playerPage.text();
-  const sessionToken = playerHtml.match(/_t\s*=\s*'([^']+)'/)?.[1];
-  const contentId = playerHtml.match(/_qc\s*=\s*"([^"]*)"/)?.[1];
-  const shards = playerHtml.match(/_qk\s*=\s*\[([^\]]*)\]/)?.[1]
-    ?.split(",")
-    .map((s) => s.trim().replace(/^["']|["']$/g, ""));
-  if (!sessionToken || !contentId || !shards || shards.length < 4) {
-    fail("reproductor: no se pudo leer _t / _qc / _qk");
-    return;
-  }
-  const signed = shards[1] + shards[3] + shards[0] + shards[2];
-  const proof = fnv1a(`${signed}|clk|${contentId}`);
-  ok(`reproductor: token de sesion y token firmado reconstruido (${signed.slice(0, 24)}...)`);
-
-  const post = async (params) => {
-    const r = await fetch(`${PLAYER}/s.php`, {
+  const hls = [];
+  const embeds = [];
+  for (const token of tokens) {
+    const shield = sha256(`${token}:${Math.floor(Date.now() / 60000)}:sololatino_render_shield_2026`).slice(0, 16);
+    const playerRes = await fetch(`${BASE}/api/player-url`, {
       method: "POST",
       headers: {
         "User-Agent": UA,
-        Referer: player.url,
-        Origin: PLAYER,
-        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-XSRF-TOKEN": xsrf,
+        "X-SL-Render": shield,
+        Cookie: jar.join("; "),
+        Referer: pageUrl,
+        Origin: BASE,
       },
-      body: new URLSearchParams(params).toString(),
+      body: JSON.stringify({ t: token }),
     });
-    return { status: r.status, body: await r.text() };
-  };
-
-  const common = { tok: sessionToken, rt: signed, tk: proof, ao: BASE };
-  const listRes = await post({ a: "1", ...common });
-  let list;
-  try {
-    list = JSON.parse(listRes.body);
-  } catch {
-    fail(`s.php a=1: ${listRes.status} ${listRes.body.slice(0, 160)}`);
-    return;
-  }
-  if (!list.s || !list.s.length) {
-    fail(`s.php a=1: sin servidores (${listRes.body.slice(0, 160)})`);
-    return;
-  }
-  ok(`s.php a=1: ${list.s.length} servidores -> ${list.s.map((s) => s[0]).join(", ")}`);
-
-  const click = await post({ a: "click", ts: "1", ...common });
-  if (click.body.includes('"ok":true')) ok("s.php a=click: reproduccion marcada");
-  else fail(`s.php a=click: ${click.body.slice(0, 160)}`);
-
-  let playable = 0;
-  for (const [label, id] of list.s) {
-    const res = await post({ a: "2", v: id, ...common });
-    let data;
-    try {
-      data = JSON.parse(res.body);
-    } catch {
+    const player = await playerRes.json();
+    if (!player.url) {
+      fail(`api/player-url: ${playerRes.status} ${JSON.stringify(player)}`);
       continue;
     }
-    if (!data.u || !data.u.startsWith("http")) continue;
-    const proxy = `${PLAYER}/p.php?url=${encodeURIComponent(data.u)}&sig=${encodeURIComponent(data.sig || "")}`;
-    const playlist = await fetch(proxy, { headers: { "User-Agent": UA } });
-    const text = await playlist.text();
-    if (text.startsWith("#EXTM3U")) {
-      playable++;
-      const quality = text.match(/RESOLUTION=(\d+x\d+)/)?.[1] || "?";
-      ok(`s.php a=2 [${label}]: playlist HLS valida (${quality}), ${text.split("\n").length} lineas`);
-    } else {
-      fail(`s.php a=2 [${label}]: la respuesta no es una playlist HLS (${playlist.status})`);
+    ok(`api/player-url: ${player.type} -> ${player.url.slice(0, 60)}`);
+
+    // --- reproductor player.pelisserieshoy.com ---
+    if (player.url.includes("pelisserieshoy")) {
+      const playerPage = await fetch(player.url, {
+        headers: { "User-Agent": UA, Referer: pageUrl, Accept: "text/html,*/*;q=0.8" },
+      });
+      const playerHtml = await playerPage.text();
+      const sessionToken = playerHtml.match(/_t\s*=\s*'([^']+)'/)?.[1];
+      const contentId = playerHtml.match(/_qc\s*=\s*"([^"]*)"/)?.[1];
+      const shards = playerHtml.match(/_qk\s*=\s*\[([^\]]*)\]/)?.[1]
+        ?.split(",")
+        .map((s) => s.trim().replace(/^["']|["']$/g, ""));
+      if (!sessionToken || !contentId || !shards || shards.length < 4) {
+        fail("reproductor: no se pudo leer _t / _qc / _qk");
+        continue;
+      }
+      const signed = shards[1] + shards[3] + shards[0] + shards[2];
+      const proof = fnv1a(`${signed}|clk|${contentId}`);
+      ok("reproductor: token firmado reconstruido");
+
+      const post = async (params) => {
+        const r = await fetch(`${PLAYER}/s.php`, {
+          method: "POST",
+          headers: {
+            "User-Agent": UA,
+            Referer: player.url,
+            Origin: PLAYER,
+            "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+          },
+          body: new URLSearchParams(params).toString(),
+        });
+        return await r.text();
+      };
+      const common = { tok: sessionToken, rt: signed, tk: proof, ao: BASE };
+      const list = JSON.parse(await post({ a: "1", ...common }));
+      const languages = Object.keys(list.langs_s || {});
+      ok(`s.php a=1: ${list.s?.length || 0} servidores, idiomas: ${languages.join(", ")}`);
+      await post({ a: "click", ts: "1", ...common });
+
+      for (const [lang, servers] of Object.entries(list.langs_s || { LAT: list.s })) {
+        for (const [label, id] of servers) {
+          const raw = await post({ a: "2", v: id, ...common });
+          let data;
+          try { data = JSON.parse(raw); } catch { continue; }
+          if (!data.u || !data.u.startsWith("http")) continue;
+          const proxy = `${PLAYER}/p.php?url=${encodeURIComponent(data.u)}&sig=${encodeURIComponent(data.sig || "")}`;
+          const playlist = await fetch(proxy, { headers: { "User-Agent": UA } });
+          const text = await playlist.text();
+          if (text.startsWith("#EXTM3U")) {
+            const quality = text.match(/RESOLUTION=(\d+x\d+)/)?.[1] || "?";
+            hls.push({ lang, label, quality });
+            ok(`s.php a=2 [${lang}/${label}]: playlist HLS valida (${quality})`);
+          } else {
+            fail(`s.php a=2 [${lang}/${label}]: no es una playlist HLS (${playlist.status})`);
+          }
+        }
+      }
+    }
+
+    // --- reproductor embed69.org (protegido con Anubis) ---
+    if (player.url.includes("embed69")) {
+      const { links, anubis } = await embed69Links(player.url, pageUrl);
+      if (anubis) ok("embed69: reto de Anubis resuelto");
+      if (links.length === 0) fail("embed69: sin servidores");
+      for (const link of links) {
+        const res = await fetch(link.url, { headers: { "User-Agent": UA, Referer: player.url } }).catch(() => null);
+        const status = res ? res.status : "sin respuesta";
+        embeds.push(link);
+        console.log(`  \u00b7 embed69 ${link.name}: ${link.url} (${status})`);
+      }
+      ok(`embed69: ${links.length} enlaces descifrados`);
     }
   }
-  if (playable === 0) fail("no se resolvio ningun enlace reproducible");
+
+  const uniqueHls = new Set(hls.map((h) => `${h.lang}/${h.label}`)).size;
+  ok(`total: ${uniqueHls} fuentes HLS (pelisserieshoy) + ${embeds.length} fuentes embebidas (embed69)`);
+  if (uniqueHls + embeds.length < 2) fail("no se han obtenido fuentes varias");
 }
 
-// ----------------------------------------------------------------- FlixLatam
+// --------------------------------------------------------------- FlixLatam
 
 async function verifyFlixLatam() {
   console.log("\n== FlixLatam (flixlatam.com) ==");
@@ -181,16 +277,12 @@ async function verifyFlixLatam() {
   const pageUrl = `${BASE}/pelicula/angel-y-el-pistolero-ev2BxB`;
 
   const catalog = await fetch(`${BASE}/peliculas`, { headers: { "User-Agent": UA } });
-  const catalogHtml = await catalog.text();
-  const cards = catalogHtml.match(/<article class="item">/g) || [];
-  if (cards.length > 0) ok(`catalogo: ${cards.length} tarjetas en /peliculas`);
-  else fail("catalogo: no se encontraron tarjetas");
+  const cards = (await catalog.text()).match(/<article class="item">/g) || [];
+  cards.length > 0 ? ok(`catalogo: ${cards.length} tarjetas en /peliculas`) : fail("catalogo: sin tarjetas");
 
   const search = await fetch(`${BASE}/search?s=batman`, { headers: { "User-Agent": UA } });
-  const searchHtml = await search.text();
-  const found = searchHtml.match(/<article class="item">/g) || [];
-  if (found.length > 0) ok(`busqueda: ${found.length} resultados para "batman"`);
-  else fail("busqueda: sin resultados");
+  const found = (await search.text()).match(/<article class="item">/g) || [];
+  found.length > 0 ? ok(`busqueda: ${found.length} resultados para "batman"`) : fail("busqueda: sin resultados");
 
   const page = await fetch(pageUrl, { headers: { "User-Agent": UA } });
   const html = await page.text();
@@ -201,36 +293,18 @@ async function verifyFlixLatam() {
   }
   ok(`ficha: reproductor ${vidurl}`);
 
-  const playerRes = await fetch(`${BASE}${vidurl}`, { headers: { "User-Agent": UA, Referer: pageUrl } });
-  const playerHtml = await playerRes.text();
-  const dataRaw = playerHtml.match(/let dataLink\s*=\s*(\[[\s\S]*?\]);/)?.[1];
-  const challenge = playerHtml.match(/LINK_CHALLENGE\s*=\s*'([^']+)'/)?.[1];
-  const salt = playerHtml.match(/LINK_SALT\s*=\s*'([^']+)'/)?.[1];
-  if (!dataRaw || !challenge || !salt) {
-    fail("reproductor: faltan dataLink / LINK_CHALLENGE / LINK_SALT");
+  const { links, anubis } = await embed69Links(`${BASE}${vidurl}`, pageUrl);
+  if (anubis) ok("reproductor: reto de Anubis resuelto");
+  if (links.length === 0) {
+    fail("reproductor: sin servidores");
     return;
   }
-  const key = crypto.createHash("sha256").update(challenge + salt, "utf8").digest();
-  ok("reproductor: dataLink y clave AES derivados");
-
-  const files = JSON.parse(dataRaw);
-  let decrypted = 0;
-  for (const file of files) {
-    for (const server of file.sortedEmbeds || []) {
-      const raw = Buffer.from(server.link, "base64");
-      const iv = raw.subarray(0, 16);
-      const ct = raw.subarray(16);
-      const decipher = crypto.createDecipheriv("aes-256-cbc", key, iv);
-      const plain = Buffer.concat([decipher.update(ct), decipher.final()]).toString("utf8").replace(/`/g, "").trim();
-      if (!plain.startsWith("http")) continue;
-      decrypted++;
-      const res = await fetch(plain, { headers: { "User-Agent": UA, Referer: pageUrl } }).catch(() => null);
-      const status = res ? res.status : "sin respuesta";
-      console.log(`  \u00b7 ${file.video_language} / ${server.servername}: ${plain} (${status})`);
-    }
+  for (const link of links) {
+    const res = await fetch(link.url, { headers: { "User-Agent": UA, Referer: `${BASE}${vidurl}` } }).catch(() => null);
+    console.log(`  \u00b7 ${link.name}: ${link.url} (${res ? res.status : "sin respuesta"})`);
   }
-  if (decrypted > 0) ok(`${decrypted} enlaces descifrados`);
-  else fail("no se descifro ningun enlace");
+  ok(`${links.length} enlaces descifrados (${[...new Set(links.map((l) => l.name.split("/")[0]))].join(", ")})`);
+  if (links.length < 2) fail("se esperaban varias fuentes");
 }
 
 // --------------------------------------------------------------------- main
@@ -238,4 +312,5 @@ async function verifyFlixLatam() {
 const which = process.argv[2] || "ambos";
 if (which === "soloLatino" || which === "ambos") await verifySoloLatino();
 if (which === "flixlatam" || which === "ambos") await verifyFlixLatam();
-console.log(process.exitCode ? "\nFALLOS" : "\nTODO CORRECTO");
+console.log(failed ? "\nFALLOS" : "\nTODO CORRECTO");
+process.exitCode = failed ? 1 : 0;

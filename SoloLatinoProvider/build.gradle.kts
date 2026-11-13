@@ -1,7 +1,9 @@
-version = 1
+version = 2
 
 android {
     namespace = "com.anonimo00.sololatino"
+    // Codigo comun a todos los proveedores (reproductor EMBED69, Anubis...).
+    sourceSets["main"].java.srcDir("../shared/src/main/kotlin")
 }
 
 cloudstream {

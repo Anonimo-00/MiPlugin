@@ -30,6 +30,9 @@ repositorio y un workflow que publica los `.cs3` en la rama `builds`.
 ├── gradle/
 ├── .github/workflows/build.yml   # CI: compila y publica en la rama `builds`
 ├── tools/verify.mjs              # Verificación en vivo contra los sitios reales
+├── shared/                       # Código común a todos los proveedores
+│   └── src/main/kotlin/com/anonimo00/shared/
+│       └── Embed69.kt            # Reproductor EMBED69 + solver de Anubis
 ├── SoloLatinoProvider/
 │   ├── build.gradle.kts          # Metadatos del proveedor (versión, status, tvTypes)
 │   └── src/main/
@@ -46,8 +49,12 @@ repositorio y un workflow que publica los `.cs3` en la rama `builds`.
         └── kotlin/com/anonimo00/flixlatam/
             ├── FlixLatamPlugin.kt
             ├── FlixLatamProvider.kt
-            └── FlixLatamPlayer.kt      # Descifrado AES del reproductor Embed69
+            └── FlixLatamPlayer.kt      # Delega en el reproductor EMBED69 común
 ```
+
+El código de `shared/` se incrusta en cada `.cs3` mediante
+`sourceSets["main"].java.srcDir("../shared/src/main/kotlin")`, así que los
+próximos proveedores reutilizarán el reproductor EMBED69 sin duplicar código.
 
 ## Importar en CloudStream
 
@@ -73,6 +80,19 @@ https://raw.githubusercontent.com/Anonimo-00/MiPlugin/master/repo.json
 Una vez añadido el repositorio, en la lista de extensiones aparecerán
 `SoloLatinoProvider` y `FlixLatamProvider` para instalar.
 
+## Cuántas fuentes da cada sitio
+
+Los dos sitios ofrecen **varias fuentes por título**, no una sola:
+
+| Sitio | Fuentes por título | De dónde salen |
+|---|---|---|
+| sololatino.net | 2 HLS + 6 embebidas | `player.pelisserieshoy.com` (LAT y SUB) + `embed69.org` (LAT/SUB × 3 servidores) |
+| flixlatam.com | 6 embebidas | `dataLink` del reproductor EMBED69 (LAT/SUB × streamwish, voe, vidhide) |
+
+Las HLS de sololatino se sirven a través del proxy del propio sitio
+(`/p.php?url=...&sig=...`) y las embebidas se pasan al extractor de
+CloudStream que toque (Voe, Streamwish, Vidhide...).
+
 ## Cómo se extraen los enlaces
 
 ### SoloLatino
@@ -89,14 +109,17 @@ público pero los enlaces de reproducción salen de su API:
    de sesión (`_t`), el identificador del contenido (`_qc`) y un token firmado
    (`rt`) repartido en cuatro trozos que se recomponen en otro orden. La firma
    `tk` es un FNV-1a de 32 bits.
-4. `POST /s.php` con `a=1` devuelve los servidores, `a=click` valida la
-   reproducción y `a=2` resuelve cada servidor a una URL HLS firmada (`sig`).
+4. `POST /s.php` con `a=1` devuelve los servidores **agrupados por idioma**
+   (`langs_s`: `LAT` y `SUB`), `a=click` valida la reproducción y `a=2`
+   resuelve cada servidor a una URL HLS firmada (`sig`). Se resuelven **todos**
+   los idiomas, no solo el primero.
 5. El HLS se reproduce a través del proxy del propio sitio
    (`/p.php?url=...&sig=...`): con un `Referer` de sololatino.net responde 403.
-
-Los reproductores alternativos (`embed69.org`) están protegidos con Anubis
-(proof of work) y se descartan; el reproductor principal ya da servidores
-gratuitos.
+6. El **segundo botón** de servidor apunta a `embed69.org`, que es un
+   reproductor EMBED69 protegido con **Anubis** (proof of work). `shared/Embed69.kt`
+   resuelve el reto (SHA-256 con los primeros bits a cero), saca las cookies
+   que dan acceso y descifra los enlaces AES de los servidores. Es una fuente
+   extra independiente de la de `pelisserieshoy`.
 
 ### FlixLatam
 
@@ -109,6 +132,16 @@ de EMBED69 con los servidores embebidos en el HTML:
    el IV.
 4. Los enlaces resultantes (Voe, Streamwish, Vidhide…) se pasan al extractor
    que CloudStream ya trae, normalizando beforehand los dominios rotados.
+
+### El reproductor EMBED69 (común a los dos)
+
+`shared/src/main/kotlin/com/anonimo00/shared/Embed69.kt` centraliza:
+
+- el descifrado AES-256-CBC de `dataLink`,
+- la normalización de dominios rotados (`hglink.to` → `streamwish.to`,
+  `morencius.com` → `vidhidepro.com`, …),
+- y el solver del proof of work de **Anubis**, con el que `embed69.org` bloquea
+  la página a los bots.
 
 ## Verificar los enlaces
 

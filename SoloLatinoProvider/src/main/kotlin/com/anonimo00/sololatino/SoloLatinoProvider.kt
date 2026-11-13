@@ -21,7 +21,11 @@ import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
 
@@ -190,19 +194,48 @@ class SoloLatinoProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
         val links = SoloLatinoPlayer.resolve(data)
+        var found = false
         for (link in links) {
-            callback.invoke(
-                newExtractorLink(
-                    link.name,
-                    link.name,
-                    link.url,
-                    if (link.isM3u8) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO,
-                ) {
-                    this.referer = link.referer ?: ""
+            found = true
+            when (link.kind) {
+                // Reproductores externos (Voe, Streamwish, Vidhide...): los
+                // resuelve el extractor que CloudStream ya trae.
+                SoloLatinoKind.EMBED -> loadExtractor(link.url, link.referer, subtitleCallback) {
+                    extractorLink ->
+                    CoroutineScope(Dispatchers.IO).launch {
+                        callback.invoke(
+                            newExtractorLink(
+                                link.name,
+                                link.name,
+                                extractorLink.url,
+                            ) {
+                                this.quality = extractorLink.quality
+                                this.type = extractorLink.type
+                                this.referer = extractorLink.referer
+                                this.headers = extractorLink.headers
+                                this.extractorData = extractorLink.extractorData
+                            }
+                        )
+                    }
                 }
-            )
+
+                else -> callback.invoke(
+                    newExtractorLink(
+                        link.name,
+                        link.name,
+                        link.url,
+                        if (link.kind == SoloLatinoKind.HLS) {
+                            ExtractorLinkType.M3U8
+                        } else {
+                            ExtractorLinkType.VIDEO
+                        },
+                    ) {
+                        this.referer = link.referer ?: ""
+                    }
+                )
+            }
         }
-        return links.isNotEmpty()
+        return found
     }
 
     // ---------- schema.org ----------
