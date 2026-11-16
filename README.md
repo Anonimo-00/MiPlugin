@@ -204,25 +204,22 @@ proveedor), y después el catálogo, la búsqueda y la ficha.
 | 1 | <https://pelisplushd.mx/> | Hecho (el sitio real es `pelisplushd.la`) |
 | 2 | <https://verpeliculasultra.com/> | Hecho |
 | 3 | <https://www.flixcorn.net/> | Hecho |
-| 4 | <https://wnv5.gnula.cc/> | Hecho (el sitio real es `gnula.la`) |
+| 4 | <https://wnv5.gnula.cc/> | Hecho (el sitio real es `gnula.la`; el `.cc` está bloqueado por Cloudflare incluso en navegador) |
 | 5 | <https://ver.gnula.one/> | Hecho |
-| 6 | <https://www.hackstore.fo/> | Hecho |
+| 6 | <https://www.hackstore.fo/> | Hecho (solo las películas tienen servidores online) |
 | 7 | <https://hackstore2.com/> | Descartado: es un sitio de descargas, sin reproductor |
 | 8 | <https://cinecalidad.org/> | Hecho |
-| 9 | <https://ww4.animeonline.ninja/inicio/> | Hecho (el sitio real es `animeonline.one`) |
+| 9 | <https://ww4.animeonline.ninja/inicio/> | Hecho (el sitio real es `animeonline.one`; el `.ninja` bloquea y además usa otro tema) |
 | 10 | <https://www.cinemultimediaflix.com/> | Descartado: solo tiene enlaces de descarga (GoFile, MediaFire, Drive), no hay m3u8 |
 | 11 | <https://latanime.org/> | Hecho |
-| 12 | <https://animejara.com/catalogo> | Descartado: solo se abre con navegador (reto gestionado de Cloudflare) |
+| 12 | <https://animejara.com/catalogo> | Descartado: **todo** el sitio (incluido su CDN `hj.animejara.com`) está detrás del reto gestionado de Cloudflare y no hay mirror |
 | 13 | <https://serieslan.live/> | Hecho |
-| 14 | <https://hdfull.to/> | Descartado: el dominio real es `hdfull.sbs` (bloqueado por Cloudflare) y **todo el sitio pide cuenta** (`POST /a/login` + `__csrf_magic`), así que no sirve como proveedor público |
+| 14 | <https://hdfull.to/> | Descartado: el dominio real es `hdfull.sbs` (bloqueado) y **todo el sitio pide cuenta** (`POST /a/login` + `__csrf_magic`), así que no sirve como proveedor público |
 
-Lista plana para trabajar:
-
-```
-https://hackstore2.com/
-https://www.cinemultimediaflix.com/
-https://hdfull.to/
-```
+Los tres sitios con Cloudflare se comprobaron también con navegador real
+(browse): `animejara.com` carga en el navegador pero su API y su CDN no
+responden a un cliente HTTP normal, que es lo que hace un proveedor de
+CloudStream.
 
 ## Nota
 
