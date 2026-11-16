@@ -1,4 +1,4 @@
-package com.anonimo00.flixlatam
+﻿package com.anonimo00.flixlatam
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.lagradost.cloudstream3.HomePageList
@@ -43,6 +43,11 @@ class FlixLatamProvider : MainAPI() {
     override val hasMainPage = true
     override val hasChromecastSupport = true
     override val hasDownloadSupport = true
+    /** La busqueda es una sola peticion: sirve para la busqueda rapida de la app. */
+    override val hasQuickSearch = true
+
+    /** La busqueda rapida reutiliza la busqueda normal. */
+    override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
     override val supportedTypes = setOf(
         TvType.Movie,
         TvType.TvSeries,

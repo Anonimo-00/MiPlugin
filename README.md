@@ -15,6 +15,7 @@ catálogos de streaming en español latino:
 | `FlixCornProvider` | [flixcorn.net](https://www.flixcorn.net) | Series y animes | es |
 | `AnimeOnlineProvider` | [animeonline.one](https://animeonline.one) | Animes | es |
 | `LatanimeProvider` | [latanime.org](https://latanime.org) | Animes | es |
+| `SeriesLanProvider` | [serieslan.live](https://serieslan.live) | Series y animes | es |
 | `HackstoreProvider` | [hackstore.fo](https://www.hackstore.fo) | Películas (las series no tienen servidores) | es |
 
 > **Nota:** este repositorio se ha desarrollado **con ayuda de IA** (asistente
@@ -54,6 +55,7 @@ repositorio y un workflow que publica los `.cs3` en la rama `builds`.
 ├── FlixCornProvider/             # flixcorn.net
 ├── AnimeOnlineProvider/          # animeonline.one
 ├── LatanimeProvider/             # latanime.org
+├── SeriesLanProvider/            # serieslan.live
 └── HackstoreProvider/            # hackstore.fo
 ```
 
@@ -101,7 +103,48 @@ Los sitios ofrecen **varias fuentes por título**, no una sola:
 | flixcorn.net | 1 por servidor | `/external/<id>` (JSON) → vidaraa.cc → `/api/stream` |
 | animeonline.one | 3 embebidas | `a.btn[data-hash]` (base64, sin cifrar) |
 | latanime.org | 7 embebidas | `a.play-video[data-player]` (base64, sin cifrar) |
+| serieslan.live | 1 HLS por episodio | `/api/rest/v1/episodes` → `player.serieslan.live` → vimeos con JWT |
 | hackstore.fo | 1 por reproductor | `a.playr[data-href]` → `play.php` → vimeos |
+
+## Verificar los enlaces
+
+`tools/verify.mjs` reproduce la lógica de los proveedores contra los sitios
+reales (mismos selectores) y comprueba, para los doce:
+
+1. que el catálogo devuelve contenido,
+2. que el buscador devuelve resultados **relevantes** para la consulta,
+3. que la página 2 del buscador trae resultados distintos (paginación),
+4. que la ficha se lee bien (título, año, póster, episodios),
+5. que los enlaces resueltos devuelven una **playlist HLS válida**.
+
+```bash
+node tools/verify.mjs              # todos
+node tools/verify.mjs gnula        # solo uno
+```
+
+La última ejecución daba **72/72 comprobaciones correctas**.
+
+## Detalles de compatibilidad con CloudStream
+
+Cosas que hacen que las extensiones funcionen bien en la app:
+
+- **Búsqueda paginada** (`search(query, page)`): la app la usa para el botón
+  "expandir" de la vista de búsqueda. Se implementa en los sitios que
+  paginan (sololatino, pelisplushd, hackstore, gnula, cinecalidad, serieslan).
+- **Búsqueda rápida** (`hasQuickSearch` + `quickSearch`): activa el panel de
+  búsqueda rápida de CloudStream en los proveedores que responden en una sola
+  petición.
+- **`fileHash` + cache busting**: la app comprueba el sha256 de cada `.cs3`
+  contra el `fileHash` del `plugins.json`. Sin más, la CDN puede servir el
+  `.cs3` viejo mientras el `plugins.json` ya trae el hash nuevo y la descarga
+  falla con *"Extension hash mismatch"* (pasaba al descargar todo de golpe).
+  El workflow añade el hash a la url de cada plugin
+  (`...cs3?v=sha256-...`), así que cada url apunta siempre al archivo exacto
+  que describe y el hash nunca falla.
+- **Reintentos en el CI**: el plugin de CloudStream se resuelve como
+  `-SNAPSHOT` desde jitpack y falla de vez en cuando; el workflow reintenta
+  hasta tres veces y, si persiste, saca el error como *annotation* del run.
+- **Iconos verificados**: todos los `iconUrl` devuelven imagen (comprobado).
 
 ## Protocolos que se resuelven
 
@@ -130,18 +173,6 @@ subtítulos (`.vtt`).
 Su `main.js` salta a uno de los dominios principales (`audinifer.com`,
 `hanerix.com`, `vibuxer.com`); en el dominio bueno ya viene la playlist
 empaquetada (`links.hls4`).
-
-## Verificar los enlaces
-
-`tools/verify.mjs` reproduce la lógica de los proveedores contra los sitios
-reales y comprueba que los enlaces resueltos devuelven una playlist HLS
-válida:
-
-```bash
-node tools/verify.mjs            # todos
-node tools/verify.mjs soloLatino
-node tools/verify.mjs gnula
-```
 
 ## Compilar localmente
 
@@ -176,21 +207,20 @@ proveedor), y después el catálogo, la búsqueda y la ficha.
 | 4 | <https://wnv5.gnula.cc/> | Hecho (el sitio real es `gnula.la`) |
 | 5 | <https://ver.gnula.one/> | Hecho |
 | 6 | <https://www.hackstore.fo/> | Hecho |
-| 7 | <https://hackstore2.com/> | Pendiente de investigar |
+| 7 | <https://hackstore2.com/> | Descartado: es un sitio de descargas, sin reproductor |
 | 8 | <https://cinecalidad.org/> | Hecho |
 | 9 | <https://ww4.animeonline.ninja/inicio/> | Hecho (el sitio real es `animeonline.one`) |
-| 10 | <https://www.cinemultimediaflix.com/> | Pendiente de investigar |
+| 10 | <https://www.cinemultimediaflix.com/> | Descartado: solo tiene enlaces de descarga (GoFile, MediaFire, Drive), no hay m3u8 |
 | 11 | <https://latanime.org/> | Hecho |
 | 12 | <https://animejara.com/catalogo> | Descartado: solo se abre con navegador (reto gestionado de Cloudflare) |
-| 13 | <https://serieslan.live/> | Pendiente de investigar |
-| 14 | <https://hdfull.to/> | Pendiente de investigar |
+| 13 | <https://serieslan.live/> | Hecho |
+| 14 | <https://hdfull.to/> | Descartado: el dominio real es `hdfull.sbs` (bloqueado por Cloudflare) y **todo el sitio pide cuenta** (`POST /a/login` + `__csrf_magic`), así que no sirve como proveedor público |
 
 Lista plana para trabajar:
 
 ```
 https://hackstore2.com/
 https://www.cinemultimediaflix.com/
-https://serieslan.live/
 https://hdfull.to/
 ```
 

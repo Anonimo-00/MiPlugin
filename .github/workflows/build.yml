@@ -68,6 +68,32 @@ jobs:
             done
             exit 1
           fi
+
+      - name: Cache busting en las urls de los plugins
+        run: |
+          cd $GITHUB_WORKSPACE/src
+          # La app comprueba el sha256 de cada .cs3 contra el fileHash del
+          # plugins.json. Sin un parametro unico por version, la CDN puede
+          # servir el .cs3 viejo mientras el plugins.json ya trae el hash
+          # nuevo -> "Extension hash mismatch" al descargar todo de golpe.
+          # Anadir el hash a la url hace que cada url apunte siempre al
+          # archivo exacto que describe.
+          node -e '
+            const fs = require("fs");
+            const file = "build/plugins.json";
+            const list = JSON.parse(fs.readFileSync(file, "utf8"));
+            for (const item of list) {
+              if (item.url && !item.url.includes("?")) {
+                item.url = item.url + "?v=" + (item.fileHash || "").replace(/[^a-zA-Z0-9]/g, "");
+              }
+            }
+            fs.writeFileSync(file, JSON.stringify(list, null, 4));
+            console.log("urls con cache busting: " + list.length);
+          '
+
+      - name: Publish builds
+        run: |
+          cd $GITHUB_WORKSPACE/src
           find . -path '*/build/*.cs3' -exec cp {} $GITHUB_WORKSPACE/builds/ \;
           cp build/plugins.json $GITHUB_WORKSPACE/builds
           # El manifiesto del repositorio tambien se publica en la rama builds

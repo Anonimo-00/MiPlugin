@@ -1,4 +1,4 @@
-version = 1
+﻿version = 2
 
 android {
     namespace = "com.anonimo00.pelisplushd"
@@ -16,5 +16,5 @@ cloudstream {
         "Anime",
     )
     language = "es"
-    iconUrl = "https://pelisplushd.la/static/images/logo/apple-touch-icon.png"
+    iconUrl = "https://pelisplushd.la/static/images/logo/logo.png"
 }

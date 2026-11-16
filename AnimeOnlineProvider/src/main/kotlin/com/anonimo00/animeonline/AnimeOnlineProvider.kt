@@ -1,4 +1,4 @@
-package com.anonimo00.animeonline
+﻿package com.anonimo00.animeonline
 
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
@@ -44,6 +44,11 @@ class AnimeOnlineProvider : MainAPI() {
     override val hasMainPage = true
     override val hasChromecastSupport = true
     override val hasDownloadSupport = true
+    /** La busqueda es una sola peticion: sirve para la busqueda rapida de la app. */
+    override val hasQuickSearch = true
+
+    /** La busqueda rapida reutiliza la busqueda normal. */
+    override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
     override val supportedTypes = setOf(TvType.Anime)
 
     override val mainPage = mainPageOf(
@@ -71,17 +76,20 @@ class AnimeOnlineProvider : MainAPI() {
     }
 
     private fun cards(document: Element): List<SearchResponse> =
-        document.select(".flw-item").mapNotNull { it.toSearchResult() }
+        // En las paginas de busqueda conviven los resultados con los charts
+        // de mas vistos, asi que se acota a la lista de peliculas.
+        document.select("div.film_list .flw-item, section.block_area-anime .flw-item")
+            .mapNotNull { it.toSearchResult() }
 
     // ---------- main page ----------
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val url = if (request.data.isEmpty()) {
-            "$mainUrl/page/$page/"
+            "/page/$page/"
         } else {
-            "$mainUrl/${request.data}&page=$page"
+            "/${request.data}&page=$page"
         }
-        val document = app.get(url).document
+        val document = fetch(url).document
         val hasNext = document.selectFirst(".pagination a[href*=\"page=$((page + 1))\"]") != null
         return newHomePageResponse(
             list = HomePageList(
@@ -93,17 +101,34 @@ class AnimeOnlineProvider : MainAPI() {
         )
     }
 
+    /**
+     * Descarga una pagina probando los dominios por orden de preferencia.
+     *
+     * `animeonline.one` sirve el sitio sin reto de Cloudflare, mientras que
+     * `ww4.animeonline.ninja` esta detras del reto gestionado; se prueban
+     * ambos por si el primero deja de responder.
+     */
+    private suspend fun fetch(path: String): com.lagradost.nicehttp.NiceResponse {
+        for (domain in DOMAINS) {
+            val response = runCatching { app.get("$domain$path") }.getOrNull() ?: continue
+            if (response.isSuccessful && response.document.select("body").text().isNotBlank()) {
+                return response
+            }
+        }
+        return app.get("$mainUrl$path")
+    }
+
     // ---------- search ----------
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val document = app.get("$mainUrl/?s=${query.trim().replace(" ", "+")}").document
+        val document = fetch("/?s=${query.trim().replace(" ", "+")}").document
         return cards(document)
     }
 
     // ---------- load ----------
 
     override suspend fun load(url: String): LoadResponse? {
-        val document = app.get(url).document
+        val document = fetch(urlPath(url)).document
         val title = document.selectFirst("h1.film-name.dynamic-name")?.text()?.trim()
             ?: document.selectFirst("h1")?.text()?.trim()
             ?: return null
@@ -153,7 +178,7 @@ class AnimeOnlineProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        val document = app.get(data).document
+        val document = fetch(urlPath(data)).document
         val servers = document.select(".server-item a.btn[data-hash]")
         if (servers.isEmpty()) return false
 
@@ -186,5 +211,21 @@ class AnimeOnlineProvider : MainAPI() {
             }
         }
         return true
+    }
+
+    companion object {
+        /**
+         * Dominios por orden de preferencia. `animeonline.one` es el que
+         * responde sin reto de Cloudflare; el `.ninja` oficial esta bloqueado.
+         */
+        private val DOMAINS = listOf("https://animeonline.one", "https://ww4.animeonline.ninja")
+
+        /** Convierte una url absoluta del sitio en un path relativo. */
+        private fun urlPath(url: String): String {
+            val withoutDomain = DOMAINS.firstOrNull { url.startsWith(it) }
+                ?.let { url.removePrefix(it) }
+                ?: url
+            return if (withoutDomain.startsWith("/")) withoutDomain else "/$withoutDomain"
+        }
     }
 }

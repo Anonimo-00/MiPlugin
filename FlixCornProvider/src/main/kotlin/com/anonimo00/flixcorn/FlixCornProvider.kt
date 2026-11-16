@@ -46,6 +46,11 @@ class FlixCornProvider : MainAPI() {
     override val hasMainPage = true
     override val hasChromecastSupport = true
     override val hasDownloadSupport = true
+    /** La busqueda es una sola peticion: sirve para la busqueda rapida de la app. */
+    override val hasQuickSearch = true
+
+    /** La busqueda rapida reutiliza la busqueda normal. */
+    override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
     override val supportedTypes = setOf(TvType.TvSeries, TvType.Anime)
 
     override val mainPage = mainPageOf(

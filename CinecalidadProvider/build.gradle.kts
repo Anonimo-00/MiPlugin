@@ -1,4 +1,4 @@
-﻿version = 1
+﻿version = 2
 
 android {
     namespace = "com.anonimo00.cinecalidad"
@@ -14,5 +14,5 @@ cloudstream {
         "Movie", "TvSeries", "Anime",
     )
     language = "es"
-    iconUrl = "https://cinecalidad.org/favicon.ico"
+    iconUrl = "https://cinecalidad.org/wp-content/uploads/2026/10/cropped-Sin-titu2lo-3-300x300.png"
 }

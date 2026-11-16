@@ -1,4 +1,4 @@
-version = 2
+﻿version = 2
 
 android {
     namespace = "com.anonimo00.flixlatam"

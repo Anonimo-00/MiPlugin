@@ -1,4 +1,4 @@
-version = 2
+﻿version = 2
 
 android {
     namespace = "com.anonimo00.sololatino"
@@ -15,7 +15,8 @@ cloudstream {
         "TvSeries",
         "Anime",
         "Cartoon",
+        "AsianDrama",
     )
     language = "es"
-    iconUrl = "https://sololatino.net/wp-content/uploads/2020/10/cropped-logo-final-192x192.png"
+    iconUrl = "https://sololatino.net/images/logo.png"
 }

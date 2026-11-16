@@ -1,4 +1,4 @@
-package com.anonimo00.pelisplushd
+﻿package com.anonimo00.pelisplushd
 
 import com.lagradost.cloudstream3.Actor
 import com.lagradost.cloudstream3.ActorData
@@ -9,6 +9,7 @@ import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.MainPageRequest
 import com.lagradost.cloudstream3.Score
 import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.SearchResponseList
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.app
@@ -18,6 +19,7 @@ import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newMovieSearchResponse
+import com.lagradost.cloudstream3.newSearchResponseList
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
@@ -50,6 +52,11 @@ class PelisPlusHDProvider : MainAPI() {
     override val hasMainPage = true
     override val hasChromecastSupport = true
     override val hasDownloadSupport = true
+    /** La busqueda es una sola peticion: sirve para la busqueda rapida de la app. */
+    override val hasQuickSearch = true
+
+    /** La busqueda rapida reutiliza la busqueda normal. */
+    override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
     override val supportedTypes = setOf(
         TvType.Movie,
         TvType.TvSeries,
@@ -123,9 +130,18 @@ class PelisPlusHDProvider : MainAPI() {
 
     // ---------- search ----------
 
-    override suspend fun search(query: String): List<SearchResponse> {
+    override suspend fun search(query: String): List<SearchResponse> = searchPage(query, 1)
+
+    /** Busqueda paginada: el sitio pagina el buscador con `?page=N`. */
+    override suspend fun search(query: String, page: Int): SearchResponseList? {
+        val list = searchPage(query, page)
+        return newSearchResponseList(list, list.size >= SEARCH_PAGE_SIZE)
+    }
+
+    private suspend fun searchPage(query: String, page: Int): List<SearchResponse> {
         val encoded = URLEncoder.encode(query.trim(), "UTF-8")
-        val document = app.get("$mainUrl/search?s=$encoded").document
+        val separator = if (page > 1) "&page=$page" else ""
+        val document = app.get("$mainUrl/search?s=$encoded$separator").document
         return cards(document)
     }
 
@@ -189,6 +205,11 @@ class PelisPlusHDProvider : MainAPI() {
                 this.actors = actors.map { ActorData(Actor(it)) }
             }
         }
+    }
+
+    companion object {
+        /** Numero de resultados por pagina del buscador. */
+        private const val SEARCH_PAGE_SIZE = 24
     }
 
     // ---------- links ----------

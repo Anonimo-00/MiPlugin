@@ -1,4 +1,4 @@
-﻿version = 1
+﻿version = 2
 
 android {
     namespace = "com.anonimo00.verpeliculasultra"
@@ -14,5 +14,5 @@ cloudstream {
         "Movie",
     )
     language = "es"
-    iconUrl = "https://verpeliculasultra.com/favicon.ico"
+    iconUrl = "https://verpeliculasultra.com/templates/vpu/images/logo.png"
 }

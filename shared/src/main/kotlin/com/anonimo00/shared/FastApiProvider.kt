@@ -8,6 +8,7 @@ import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.MainPageRequest
 import com.lagradost.cloudstream3.Score
 import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.SearchResponseList
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.app
@@ -16,6 +17,7 @@ import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newMovieSearchResponse
+import com.lagradost.cloudstream3.newSearchResponseList
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
@@ -123,6 +125,8 @@ internal data class ApiTaxonomy(
  * `postType`, asi que hay que enviar los dos.
  */
 abstract class FastApiProvider : MainAPI() {
+    /** La API responde rapido: se puede usar en la busqueda rapida de la app. */
+    override val hasQuickSearch = true
     /** Url del sitio (sin barra final). */
     protected abstract val siteUrl: String
 
@@ -171,9 +175,29 @@ abstract class FastApiProvider : MainAPI() {
 
     // ---------- busqueda ----------
 
-    override suspend fun search(query: String): List<SearchResponse> {
+    override suspend fun search(query: String): List<SearchResponse> =
+        searchPage(query, 1)
+
+    /** La busqueda rapida de la app reutiliza la busqueda normal. */
+    override suspend fun quickSearch(query: String): List<SearchResponse> =
+        searchPage(query, 1)
+
+    /**
+     * Busqueda paginada: la app la usa para poder "expandir" los resultados de
+     * un proveedor en la vista de busqueda.
+     */
+    override suspend fun search(query: String, page: Int): SearchResponseList? {
+        val list = searchPage(query, page)
+        // La API no devuelve la paginacion en las busquedas, asi que se deduce
+        // de si la pagina viene llena.
+        return newSearchResponseList(list, list.size >= POSTS_PER_PAGE)
+    }
+
+    private suspend fun searchPage(query: String, page: Int): List<SearchResponse> {
         val encoded = URLEncoder.encode(query.trim(), "UTF-8")
-        val response = app.get("$apiBase/search?q=$encoded&postType=any&postsPerPage=24")
+        val response = app.get(
+            "$apiBase/search?q=$encoded&postType=any&postsPerPage=$POSTS_PER_PAGE&page=$page"
+        )
         val posts = response.parsedSafe<ApiPostsResponse>()?.data?.posts ?: return emptyList()
         return posts.mapNotNull { it.toSearchResponse() }
     }
@@ -361,6 +385,9 @@ abstract class FastApiProvider : MainAPI() {
     }
 
     companion object {
+        /** Numero de resultados por pagina en el listado y la busqueda. */
+        const val POSTS_PER_PAGE = 24
+
         /** El mapa de generos va dentro del `window.siteConfig` de la home. */
         private val GENRES_REGEX = Regex(
             """genres\s*:\s*(\{.*?\})\s*,\s*years\s*:""",

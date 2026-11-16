@@ -1,4 +1,4 @@
-﻿version = 1
+﻿version = 2
 
 android {
     namespace = "com.anonimo00.gnula"
@@ -14,5 +14,5 @@ cloudstream {
         "Movie", "TvSeries", "Anime",
     )
     language = "es"
-    iconUrl = "https://gnula.la/wp-content/uploads/2022/03/bkkS61w94ZVMNVd8KEyyJl2tnY5-193x288.jpg"
+    iconUrl = "https://gnula.la/wp-content/uploads/2026/09/cropped-descarga.webp"
 }
