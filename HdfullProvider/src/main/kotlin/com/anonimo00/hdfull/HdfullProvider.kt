@@ -38,6 +38,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
@@ -486,7 +487,11 @@ class HdfullProvider(private val context: Context) : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        val page = getPage(data) ?: return false
+        val page = try {
+            withTimeout(15_000) { getPage(data) }
+        } catch (_: Exception) {
+            return false
+        } ?: return false
         val ad = AD_REGEX.find(page.html)?.groupValues?.get(1) ?: return false
         val array = runCatching { JSONArray(decodeAd(ad)) }.getOrNull() ?: return false
 
@@ -504,13 +509,23 @@ class HdfullProvider(private val context: Context) : MainAPI() {
                 .joinToString(" ")
                 .ifBlank { hoster.name }
 
-            found = true
-            when (hoster.kind) {
-                // CloudStream ya tiene extractores para estos servidores.
-                HosterKind.EXTRACTOR -> loadExtractor(url, data, subtitleCallback, callback)
-                // Estos no: seExtraen a mano.
-                else -> extractDirect(hoster, url, code, data, name, callback)
+            // Cada servidor se intenta de forma independiente con timeout corto:
+            // si uno no responde (vidmoly/powvideo/etc. lentos o caídos), no
+            // bloquea a los demás ni hace fallar toda la ficha.
+            try {
+                withTimeout(12_000) {
+                    when (hoster.kind) {
+                        // CloudStream ya tiene extractores para estos servidores.
+                        HosterKind.EXTRACTOR -> loadExtractor(url, data, subtitleCallback, callback)
+                        // Estos no: se extraen a mano.
+                        else -> extractDirect(hoster, url, code, data, name, callback)
+                    }
+                }
+            } catch (_: Exception) {
+                // servidor lento o muerto: probamos con el siguiente
             }
+
+            found = true
         }
         return found
     }

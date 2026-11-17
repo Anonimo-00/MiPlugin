@@ -1,4 +1,4 @@
-version = 5
+version = 6
 
 android {
     namespace = "com.anonimo00.gnula"
@@ -16,5 +16,6 @@ cloudstream {
     language = "es"
     iconUrl = "https://gnula.la/wp-content/uploads/2026/09/cropped-descarga.webp"
 }
+
 
 

@@ -36,7 +36,7 @@ import org.jsoup.nodes.Element
  * en claro dentro de su pagina.
  */
 class AnimeOnlineProvider : MainAPI() {
-    override var mainUrl = "https://animeonline.one"
+    override var mainUrl = "https://ww4.animeonline.ninja"
     override var name = "AnimeOnline"
     override var lang = "es"
     override val hasMainPage = true

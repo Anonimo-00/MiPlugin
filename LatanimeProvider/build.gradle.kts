@@ -1,4 +1,4 @@
-version = 5
+version = 6
 
 android {
     namespace = "com.anonimo00.latanime"
@@ -16,5 +16,6 @@ cloudstream {
     language = "es"
     iconUrl = "https://latanime.org/favicon.ico"
 }
+
 
 
