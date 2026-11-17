@@ -1,4 +1,4 @@
-﻿version = 3
+version = 4
 
 android {
     namespace = "com.anonimo00.flixcorn"
@@ -16,3 +16,4 @@ cloudstream {
     language = "es"
     iconUrl = "https://www.flixcorn.net/favicon.ico"
 }
+

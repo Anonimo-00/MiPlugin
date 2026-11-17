@@ -53,8 +53,6 @@ class FlixCornProvider : MainAPI() {
     override val supportedTypes = setOf(TvType.TvSeries, TvType.Anime)
 
     override val mainPage = mainPageOf(
-        "estrenos-series-espanol-latino" to "Estrenos",
-        "nuevos-episodios" to "Nuevos capitulos",
         "tendencias" to "Tendencias",
         "nueva-series-agregada" to "Novedades",
     )

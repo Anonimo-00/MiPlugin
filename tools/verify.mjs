@@ -376,40 +376,6 @@ async function verifyAnimeOnline() {
   }
 }
 
-// ---------------------------------------------------------------- Hackstore
-
-async function verifyHackstore() {
-  console.log("\n== Hackstore (hackstore.fo) ==");
-  const BASE = "https://www.hackstore.fo";
-  const cat = await get(`${BASE}/peliculas`);
-  ok(`catalogo: ${(cat.text.match(/class="movie-thumbnail"/g) || []).length} tarjetas`);
-
-  await checkSearch(
-    "busqueda",
-    QUERY,
-    `${BASE}/?s=${QUERY}`,
-    `${BASE}/?s=${QUERY}&paged=2`,
-    (t) => titles(t, /class="movie-title"[^>]*>([^<]*)</g),
-  );
-
-  const movieUrl = cat.text.match(/href="(https:\/\/www\.hackstore\.fo\/peliculas\/(?!page\/|feed\/)[^"\/]+\/)"/)?.[1];
-  const mv = await get(movieUrl, { Referer: BASE });
-  const playr = [...mv.text.matchAll(/<a[^>]*class="playr"[^>]*data-href="([^"]+)"/g)].map((m) => m[1]);
-  playr.length ? ok(`ficha: ${playr.length} servidores`) : fail("ficha: sin servidores");
-  if (playr.length) {
-    const play = await get(BASE + playr[0].replace(/&amp;/g, "&"), { Referer: movieUrl });
-    const embed = play.text.match(/window\.location\.href\s*=\s*'([^']+)'/)?.[1];
-    embed ? ok(`  play.php -> ${embed}`) : fail("  play.php: sin url de reproductor");
-    if (embed?.includes("vimeos.net")) {
-      const m3u8 = await vimeosM3u8(embed, movieUrl);
-      if (m3u8) {
-        const chk = await checkPlaylist(m3u8);
-        chk.ok ? ok(`  vimeos: HLS ${chk.quality}`) : fail("  vimeos: playlist no valida");
-      } else fail("  vimeos: no se pudo desempaquetar");
-    }
-  }
-}
-
 // --------------------------------------------------------------- VerGnula
 
 async function verifyVerGnula() {
@@ -716,7 +682,6 @@ const ALL = {
   gnula: () => verifyFastApi("Gnula", "https://gnula.la", "https://gnula.la/wp-api/v1", "https://gnula.la/wp-content/uploads"),
   cinecalidad: () => verifyFastApi("Cinecalidad", "https://cinecalidad.org", "https://cinecalidad.org/wp-api/v1", "https://cinecalidad.org/wp-content/uploads"),
   animeonline: verifyAnimeOnline,
-  hackstore: verifyHackstore,
   gnulaone: verifyVerGnula,
   verpeliculasultra: verifyVerPeliculasUltra,
   flixcorn: verifyFlixCorn,

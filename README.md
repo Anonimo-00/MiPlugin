@@ -16,7 +16,6 @@ catálogos de streaming en español latino:
 | `AnimeOnlineProvider` | [animeonline.one](https://animeonline.one) | Animes | es |
 | `LatanimeProvider` | [latanime.org](https://latanime.org) | Animes | es |
 | `SeriesLanProvider` | [serieslan.live](https://serieslan.live) | Series y animes | es |
-| `HackstoreProvider` | [hackstore.fo](https://www.hackstore.fo) | Películas (las series no tienen servidores) | es |
 | `HdfullProvider` | [hdfull.org](https://hdfull.org) | Películas y series (**necesita cuenta**) | es |
 
 > **Nota:** este repositorio se ha desarrollado **con ayuda de IA** (asistente
@@ -58,7 +57,6 @@ repositorio y un workflow que publica los `.cs3` en la rama `builds`.
 ├── AnimeOnlineProvider/          # animeonline.one
 ├── LatanimeProvider/             # latanime.org
 ├── SeriesLanProvider/            # serieslan.live
-├── HackstoreProvider/            # hackstore.fo
 └── HdfullProvider/               # hdfull.org (cuenta + ajustes)
 ```
 
@@ -87,7 +85,7 @@ También funciona la de la rama principal:
 https://raw.githubusercontent.com/Anonimo-00/MiPlugin/master/repo.json
 ```
 
-Una vez añadido el repositorio, en la lista de extensiones aparecerán los trece
+Una vez añadido el repositorio, en la lista de extensiones aparecerán los doce
 proveedores para instalar.
 
 ### HDFull: usuario y contraseña
@@ -179,8 +177,7 @@ Cosas que hacen que las extensiones funcionen bien en la app:
   se escribe.
 
 > **Notas de la app de pruebas de CloudStream:** el primer resultado que prueba
-> en AnimeOnline es una URL muerta del propio sitio, y la película de prueba de
-> Hackstore solo tiene descarga, no servidores online. Ninguno de los dos es un
+> en AnimeOnline es una URL muerta del propio sitio. Ninguno de los dos es un
 > fallo del proveedor (verificado con `tools/verify.mjs`).
 
 ## Protocolos que se resuelven

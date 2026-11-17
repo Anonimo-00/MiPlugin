@@ -87,10 +87,6 @@ class HdfullProvider(private val context: Context) : MainAPI() {
     /** Evita abrir el dialogo de credenciales varias veces a la vez. */
     private val prompting = AtomicBoolean(false)
 
-    /** Si el usuario cancela, no volvemos a insistir hasta que guarde otros datos. */
-    @Volatile
-    private var cancelledOnce = false
-
     // ---------- credenciales ----------
 
     private var user: String?
@@ -150,18 +146,23 @@ class HdfullProvider(private val context: Context) : MainAPI() {
                 val typedPassword = passField.text.toString()
                 user = typedUser
                 password = typedPassword
-                cancelledOnce = false
                 scope.launch {
                     val cookie = if (typedUser.isNotBlank() && typedPassword.isNotBlank()) {
                         login(typedUser, typedPassword)
                     } else {
                         null
                     }
-                    Toast.makeText(
-                        ctx,
-                        if (cookie != null) "Sesion iniciada" else "No se pudo iniciar sesion",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    if (cookie == null) {
+                        // Credenciales invalidas: las borramos para no insistir.
+                        clearCredentials()
+                        Toast.makeText(
+                            ctx,
+                            "Usuario o contraseña incorrectos",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    } else {
+                        Toast.makeText(ctx, "Sesión iniciada", Toast.LENGTH_SHORT).show()
+                    }
                     pending?.complete(cookie)
                 }
             }
@@ -173,28 +174,38 @@ class HdfullProvider(private val context: Context) : MainAPI() {
     // ---------- sesion ----------
 
     /**
-     * Devuelve una sesion valida. Si no hay ninguna guardada, se intento iniciar
+     * Devuelve una sesion valida. Si no hay ninguna guardada, se intenta iniciar
      * sesion con las credenciales guardadas y, si tampoco las hay, se pide al
      * usuario que las escriba en el panel de ajustes.
+     *
+     * Si el login con credenciales guardadas falla, se borran esas credenciales
+     * para no pedirle al usuario una y otra vez algo que ya no sirve.
      */
     private suspend fun ensureSession(): String? {
         session?.let { return it }
-        if (cancelledOnce) return null
         if (!prompting.compareAndSet(false, true)) return null
         return try {
             val storedUser = user
             val storedPassword = password
             if (!storedUser.isNullOrBlank() && !storedPassword.isNullOrBlank()) {
                 login(storedUser, storedPassword)?.let { return it }
+                // Login falló con credenciales guardadas: las borramos para no
+                // insistir con algo que ya no sirve.
+                clearCredentials()
             }
             val pending = CompletableDeferred<String?>()
             withContext(Dispatchers.Main) { showSettings(context, pending) }
-            val result = pending.await()
-            if (result == null) cancelledOnce = true
-            result
+            pending.await()
         } finally {
             prompting.set(false)
         }
+    }
+
+    /** Borra usuario, contraseña y sesión guardados. */
+    private fun clearCredentials() {
+        user = null
+        password = null
+        session = null
     }
 
     /** Inicia sesion y guarda la cookie de sesion. */

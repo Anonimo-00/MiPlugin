@@ -1,4 +1,4 @@
-version = 3
+version = 4
 
 android {
     namespace = "com.anonimo00.hdfull"
@@ -17,3 +17,4 @@ cloudstream {
     language = "es"
     iconUrl = "https://hdfullcdn.cc/favicon.ico"
 }
+

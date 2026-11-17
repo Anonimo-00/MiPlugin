@@ -1,4 +1,4 @@
-﻿version = 3
+version = 4
 
 android {
     namespace = "com.anonimo00.cinecalidad"
@@ -16,3 +16,4 @@ cloudstream {
     language = "es"
     iconUrl = "https://cinecalidad.org/wp-content/uploads/2026/10/cropped-Sin-titu2lo-3-300x300.png"
 }
+

@@ -1,4 +1,4 @@
-﻿version = 3
+version = 4
 
 android {
     namespace = "com.anonimo00.animeonline"
@@ -16,3 +16,4 @@ cloudstream {
     language = "es"
     iconUrl = "https://animeonline.one/wp-content/uploads/2026/10/psyren.jpg"
 }
+
