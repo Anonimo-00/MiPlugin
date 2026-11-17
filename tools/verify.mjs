@@ -246,6 +246,20 @@ async function verifyFlixLatam() {
 
   const { links } = await embed69Links(playerUrl || "", `${BASE}/pelicula/angel-y-el-pistolero-ev2BxB`);
   links.length ? ok(`embed69: ${links.length} enlaces descifrados`) : fail("embed69: sin enlaces");
+
+  // Los episodios usan otro reproductor (xupalace.org -> embed69.org/embed.php)
+  // que antes no se resolvia y dejaba 0 enlaces al abrir un capitulo.
+  const epUrl = `${BASE}/serie/heartland/temporada/1/capitulo/1`;
+  const ep = await get(epUrl);
+  const epIframe = ep.text.match(/<iframe[^>]*src=["']([^"']+)["'][^>]*>/i)?.[1];
+  epIframe ? ok(`episodio: reproductor ${epIframe}`) : fail("episodio: sin reproductor");
+  if (epIframe) {
+    const epPlayer = epIframe.startsWith("http") ? epIframe : `${BASE}${epIframe}`;
+    const epLinks = await embed69Links(epPlayer, epUrl);
+    epLinks.links.length
+      ? ok(`episodio embed69: ${epLinks.links.length} enlaces descifrados`)
+      : fail("episodio embed69: sin enlaces");
+  }
 }
 
 // ------------------------------------------------------------ PelisPlusHD
@@ -621,7 +635,7 @@ async function fetchEmbed69(url, referer) {
     const passUrl =
       `https://embed69.org/.within.website/x/cmd/anubis/api/pass-challenge` +
       `?id=${challenge.id}&response=${hash}&nonce=${nonce}` +
-      `&redir=${encodeURIComponent(new URL(url).pathname)}&elapsedTime=${Date.now() - started}`;
+      `&redir=${encodeURIComponent(new URL(url).pathname + new URL(url).search)}&elapsedTime=${Date.now() - started}`;
     const pass = await fetch(passUrl, { headers: { "User-Agent": UA, Referer: referer, Cookie: cookieHeader() }, redirect: "manual" });
     absorb(pass);
     const second = await fetch(url, { headers: { "User-Agent": UA, Referer: referer, Cookie: cookieHeader() } });

@@ -209,10 +209,17 @@ class AnimeOnlineProvider : MainAPI() {
 
         /** Convierte una url absoluta del sitio en un path relativo. */
         private fun urlPath(url: String): String {
-            val withoutDomain = DOMAINS.firstOrNull { url.startsWith(it) }
+            // Si la url ya es absoluta (el sitio puede redirigir a dominios externos
+        // como 9anime.qpon), se usa tal cual. Si es relativa al sitio, se le
+        // antepone el dominio correspondiente.
+        val withoutDomain = DOMAINS.firstOrNull { url.startsWith(it) }
                 ?.let { url.removePrefix(it) }
                 ?: url
-            return if (withoutDomain.startsWith("/")) withoutDomain else "/$withoutDomain"
+        return when {
+            withoutDomain.startsWith("http") -> withoutDomain
+            withoutDomain.startsWith("/") -> withoutDomain
+            else -> "/$withoutDomain"
+        }
         }
     }
 }
