@@ -13,7 +13,7 @@ catálogos de streaming en español latino:
 | `CinecalidadProvider` | [cinecalidad.org](https://cinecalidad.org) | Películas, series y animes | es |
 | `VerPeliculasUltraProvider` | [verpeliculasultra.com](https://verpeliculasultra.com) | Películas | es |
 | `FlixCornProvider` | [flixcorn.net](https://www.flixcorn.net) | Series y animes | es |
-| `AnimeOnlineProvider` | [animeonline.one](https://animeonline.one) | Animes | es |
+| `AnimeOnlineProvider` | [veranime.ninja](https://veranime.ninja) + [9anime.qpon](https://9anime.qpon) | Animes | es |
 | `LatanimeProvider` | [latanime.org](https://latanime.org) | Animes | es |
 | `SeriesLanProvider` | [serieslan.live](https://serieslan.live) | Series y animes | es |
 | `HdfullProvider` | [hdfull.org](https://hdfull.org) | Películas y series (**necesita cuenta**) | es |
@@ -54,7 +54,7 @@ repositorio y un workflow que publica los `.cs3` en la rama `builds`.
 ├── CinecalidadProvider/          # cinecalidad.org
 ├── VerPeliculasUltraProvider/    # verpeliculasultra.com
 ├── FlixCornProvider/             # flixcorn.net
-├── AnimeOnlineProvider/          # animeonline.one
+├── AnimeOnlineProvider/          # veranime.ninja + red animeonline/9anime
 ├── LatanimeProvider/             # latanime.org
 ├── SeriesLanProvider/            # serieslan.live
 └── HdfullProvider/               # hdfull.org (cuenta + ajustes)
@@ -176,11 +176,40 @@ Cosas que hacen que las extensiones funcionen bien en la app:
   `quickSearch` usa una versión ligera (sin TMDB) porque la app la llama mientras
   se escribe.
 
-> **Notas de la app de pruebas de CloudStream:** el primer resultado que prueba
-> en AnimeOnline es una URL muerta del propio sitio. Ninguno de los dos es un
-> fallo del proveedor (verificado con `tools/verify.mjs`).
+> **Nota de la app de pruebas de CloudStream:** la primera fuente que probaba
+> en AnimeOnline (`animeonline.one`) redirige hoy a `9anime.qpon`, cuyo catálogo
+> está en inglés. El proveedor usa ahora `veranime.ninja` como fuente primaria
+> (mismo catálogo en español, sin reto) y detecta cada plantilla por el HTML,
+> así que esa ruta ya devuelve resultados (verificado con `tools/verify.mjs`).
 
 ## Protocolos que se resuelven
+
+### Plantilla dual de AnimeOnline (DooPlay + film)
+
+`AnimeOnlineProvider` da servicio a tres hosts de la misma red detectando la
+plantilla por el propio HTML:
+
+* **`veranime.ninja` (DooPlay, fuente primaria)** — responde sin reto de
+  Cloudflare y trae el mismo catálogo en español. Tarjetas `article.item` y
+  `.result-item`, búsqueda `/?s=`, episodios en `#seasons ul.episodios li`
+  (`.numerando` = "temporada - episodio") y reproductores en
+  `#playeroptionsul li[data-post][data-nume]`. Esos `li` se resuelven con un
+  `POST /wp-admin/admin-ajax.php?action=doo_player_ajax`, que devuelve un
+  iframe de **darkanimes.com**: su página trae `<script id="msp-data">` con la
+  clave `pk` y los servidores en `url` = base64 **xor** con `pk`. Al
+  descifrarlos salen hosters normales (streamtape, mp4upload, uqload,
+  streamwish, mxdrop, filelions) que cogen los extractores nativos.
+* **`ver2.animeonline.ninja` / `animeonline.one` → `9anime.qpon` (film)** —
+  catálogo en inglés protegido por Cloudflare (`403` + `cf-mitigated:
+  challenge`, resuelto con `CloudflareKiller`). Tarjetas `.flw-item`,
+  episodios `.episodes-ul a.ep-item[data-number]` y reproductores en
+  `.server-item a.btn[data-hash]` (base64) que apuntan a una url interna
+  `/stream/<id>/sub`, la cual embebe un iframe de **megaplay.buzz**. Megaplay
+  exige `Referer` del sitio que lo embebe (si no, pagina "Error") y su
+  `GET /stream/getSources?id=…` devuelve `tracks` (subtítulos `.vtt`) y `enc`,
+  un payload **AES-256-CBC** con la clave/iv fijos de su propio javascript
+  (`i?LMTAx0Q6,:}50U` / `W0;27ToaUpl_P%'c`) que contiene el `master.m3u8`
+  (1080p/720p/480p, sin token).
 
 ### API de WordPress FastAPI (`gnula.la` y `cinecalidad.org`)
 

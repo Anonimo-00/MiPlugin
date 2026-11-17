@@ -32,6 +32,21 @@ const get = async (url, headers = {}) => retry(async () => {
   return { status: r.status, url: r.url, headers: r.headers, text: await r.text() };
 });
 
+/** POST de formulario (admin-ajax, wp-admin, etc). */
+const post = async (url, body, referer = url) => retry(async () => {
+  const r = await fetch(url, {
+    method: "POST",
+    headers: {
+      "User-Agent": UA,
+      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "X-Requested-With": "XMLHttpRequest",
+      Referer: referer,
+    },
+    body,
+  });
+  return { status: r.status, url: r.url, headers: r.headers, text: await r.text() };
+});
+
 /** Reintenta ante fallos de red (los sitios hacen drop de conexiones a veces). */
 const retry = async (fn, times = 3) => {
   let last;
@@ -337,41 +352,143 @@ async function verifyFastApi(name, site, api, imageBase) {
 
 // ------------------------------------------------------------- AnimeOnline
 
+/** Descifra un data-url del multiserver de darkanimes (base64 xor con pk). */
+function mspDecode(encoded, pk) {
+  const bin = Buffer.from(encoded.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+  let out = "";
+  for (let i = 0; i < bin.length; i++) out += String.fromCharCode(bin[i] ^ pk.charCodeAt(i % pk.length));
+  return out;
+}
+
+/** Descifra el payload "enc" de megaplay (aes-256-cbc con clave/iv fijos). */
+function megaDecrypt(payload) {
+  const data = Buffer.from(payload.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+  const key = Buffer.concat([Buffer.from("i?LMTAx0Q6,:}50U", "utf8"), Buffer.alloc(16)]);
+  const iv = Buffer.from("W0;27ToaUpl_P%'c", "utf8");
+  const d = crypto.createDecipheriv("aes-256-cbc", key, iv);
+  return Buffer.concat([d.update(data), d.final()]).toString("utf8");
+}
+
 async function verifyAnimeOnline() {
-  console.log("\n== AnimeOnline (animeonline.one) ==");
-  const BASE = "https://animeonline.one";
-  const home = await get(BASE);
-  ok(`catalogo: ${(home.text.match(/class="flw-item/g) || []).length} tarjetas`);
+  console.log("\n== AnimeOnline (veranime.ninja + 9anime.qpon) ==");
+  const DOO = "https://veranime.ninja";
+  const FILM = "https://9anime.qpon";
+
+  // ---------- plantilla DooPlay (fuente primaria) ----------
+  const dooHome = await get(`${DOO}/anime/`);
+  const dooCards = (dooHome.text.match(/<article class="item"/g) || []).length;
+  dooCards ? ok(`doo catalogo: ${dooCards} tarjetas`) : fail("doo catalogo: sin tarjetas");
 
   await checkSearch(
-    "busqueda",
+    "doo busqueda",
+    "boku no kokoro",
+    `${DOO}/?s=boku+no+kokoro`,
+    null,
+    (t) => titles(t, /class="title"><a[^>]*>([^<]+)<\/a>/g),
+  );
+
+  const dooDetail = await get(`${DOO}/anime/boku-no-kokoro-no-yabai-yatsu/`);
+  const dooTitle = dooDetail.text.match(/<h1[^>]*>([\s\S]{0,150}?)<\/h1>/)?.[1]?.replace(/<[^>]+>/g, " ").trim();
+  dooTitle ? ok(`doo ficha: "${dooTitle}"`) : fail("doo ficha: sin titulo");
+  const dooEps = [
+    ...new Set([...dooDetail.text.matchAll(/class=['"]episodiotitle['"][\s\S]{0,300}?href=['"]([^'"]+)['"]/g)].map((m) => m[1])),
+  ];
+  dooEps.length ? ok(`doo episodios: ${dooEps.length}`) : fail("doo episodios: ninguno");
+
+  if (dooEps.length) {
+    const ep = await get(dooEps[0]);
+    const opt = ep.text.match(/<li[^>]*class=['"][^'"]*dooplay_player_option[^'"]*['"][^>]*>/)?.[0];
+    if (opt) {
+      const attr = (n) => opt.match(new RegExp(`data-${n}=['"]([^'"]*)['"]`))?.[1];
+      const ajax = await post(
+        `${DOO}/wp-admin/admin-ajax.php`,
+        `action=doo_player_ajax&post=${encodeURIComponent(attr("post") ?? "")}&nume=${encodeURIComponent(attr("nume") ?? "")}&type=${encodeURIComponent(attr("type") ?? "tv")}`,
+        dooEps[0],
+      );
+      const embed = JSON.parse(ajax.text)?.embed_url;
+      if (embed?.startsWith("http")) {
+        ok(`doo ajax -> ${embed.slice(0, 60)}`);
+        // multiserver-pro: json en linea con pk y servidores cifrados
+        const ms = await get(embed);
+        const raw = ms.text.match(/<script type="application\/json" id="msp-data">([\s\S]*?)<\/script>/)?.[1];
+        if (raw) {
+          const j = JSON.parse(raw);
+          const items = (j.langs || []).flatMap((l) => l.items || []);
+          const real = items.map((i) => mspDecode(i.url, j.pk)).filter((u) => u.startsWith("http"));
+          real.length
+            ? ok(`doo multiserver: ${real.length} hosters (${real[0].split("/")[2]}...)`)
+            : fail("doo multiserver: sin hosters");
+          const native = ["streamtape", "mp4upload", "uqload", "streamwish", "mxdrop", "filelions"];
+          const hit = real.find((u) => native.some((h) => u.includes(h)));
+          if (hit) info(`  ejemplo: ${hit.slice(0, 80)}`);
+        } else {
+          fail("doo multiserver: sin #msp-data");
+        }
+      } else {
+        fail(`doo ajax: ${ajax.text.slice(0, 80)}`);
+      }
+    } else {
+      fail("doo episodio: sin #playeroptionsul");
+    }
+  }
+
+  // ---------- plantilla film (9anime.qpon) ----------
+  const filmHome = await get(`${FILM}/anime/`);
+  const filmCards = (filmHome.text.match(/class="flw-item/g) || []).length;
+  filmCards ? ok(`film catalogo: ${filmCards} tarjetas`) : fail("film catalogo: sin tarjetas");
+
+  await checkSearch(
+    "film busqueda",
     "psyren",
-    `${BASE}/?s=psyren`,
+    `${FILM}/?s=psyren`,
     null,
     (t) => titles(t, /<h3 class="film-name">\s*<a[^>]*data-jname="([^"]*)"/g),
   );
 
-  const animeUrl = home.text.match(/href="(https:\/\/animeonline\.one\/anime\/[^"]+)"/)?.[1];
-  const an = await get(animeUrl);
-  const title = an.text.match(/<h1[^>]*>([\s\S]{0,120}?)<\/h1>/)?.[1]?.replace(/<[^>]+>/g, " ").trim();
-  title ? ok(`ficha: "${title}"`) : fail("ficha: sin titulo");
-  const eps = [...new Set([...an.text.matchAll(/href="(https:\/\/animeonline\.one\/[^"]*-episode-\d+)\/"/g)].map((m) => m[1]))];
-  eps.length ? ok(`episodios: ${eps.length}`) : fail("episodios: ninguno");
+  const filmDetail = await get(`${FILM}/anime/dark-machine-the-animation/`);
+  const filmTitle = filmDetail.text.match(/<h1 class="film-name[^"]*"[^>]*>([\s\S]{0,150}?)<\/h1>/)?.[1]?.trim();
+  filmTitle ? ok(`film ficha: "${filmTitle}"`) : fail("film ficha: sin titulo");
+  const filmEps = [
+    ...new Set([...filmDetail.text.matchAll(/<a[^>]*href="([^"]+)"[^>]*class="[^"]*ep-item/g)].map((m) => m[1])),
+  ];
+  filmEps.length ? ok(`film episodios: ${filmEps.length}`) : fail("film episodios: ninguno");
 
-  if (eps.length) {
-    const ep = await get(eps[0]);
-    const hashes = [...ep.text.matchAll(/class="btn"[^>]*data-hash="([^"]+)"/g)].map((m) => m[1]);
-    hashes.length ? ok(`reproductor: ${hashes.length} servidores`) : fail("reproductor: sin servidores");
-    for (const h of hashes.slice(0, 4)) {
-      const url = Buffer.from(h, "base64").toString("utf8");
-      const r = await get(url, { Referer: eps[0] });
-      const m3u8 = [...new Set([...r.text.matchAll(/sources\s*:\s*\[\s*\{\s*file\s*:\s*['"]([^'"]+)['"]/g)].map((m) => m[1]))];
-      if (m3u8.length) {
-        const chk = await checkPlaylist(m3u8[0]);
-        chk.ok ? ok(`  ${url.slice(0, 45)}: HLS ${chk.quality}`) : fail(`  ${url.slice(0, 45)}: ${chk.status}`);
+  if (filmEps.length) {
+    const ep = await get(filmEps[0]);
+    const hash = ep.text.match(/data-hash="([^"]{8,})"/)?.[1];
+    if (hash) {
+      const streamUrl = Buffer.from(hash, "base64").toString("utf8");
+      const st = await get(streamUrl);
+      const frame = st.text.match(/<iframe[^>]*src="([^"]+)"/)?.[1];
+      if (frame?.includes("megaplay")) {
+        ok(`film stream -> ${frame.slice(0, 60)}`);
+        const mp = await get(frame, { Referer: "https://9anime.qpon/" });
+        const id = mp.text.match(/id="megaplay-player"[^>]*data-id="(\d+)"/)?.[1]
+          || mp.text.match(/data-realid="[^"]*"[^>]*data-id="(\d+)"/)?.[1]
+          || mp.text.match(/File (\d+) - MegaPlay/)?.[1];
+        if (id) {
+          const gs = await get(`${new URL(frame).origin}/stream/getSources?id=${id}&platform=OTHER&st=other`, {
+            Referer: frame,
+            "X-Requested-With": "XMLHttpRequest",
+          });
+          const json = JSON.parse(gs.text);
+          if (json.enc) {
+            const src = JSON.parse(megaDecrypt(json.enc)).file;
+            const chk = await checkPlaylist(src, "https://megaplay.buzz/");
+            chk.ok
+              ? ok(`film m3u8: HLS ${chk.quality} (${json.tracks?.filter((t) => t.kind === "captions").length || 0} subs)`)
+              : fail(`film m3u8: ${chk.status} ${chk.error || ""}`);
+          } else {
+            fail("film getSources: sin enc");
+          }
+        } else {
+          fail(`film megaplay: sin data-id (${mp.status}, ${mp.text.length} bytes, ${mp.url})`);
+        }
       } else {
-        info(`${url.slice(0, 70)} (${r.status}, sin m3u8 en el HTML)`);
+        fail(`film stream: sin iframe megaplay (${st.status})`);
       }
+    } else {
+      fail("film episodio: sin data-hash");
     }
   }
 }

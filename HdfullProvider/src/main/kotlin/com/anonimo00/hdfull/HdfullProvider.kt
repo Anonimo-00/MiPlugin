@@ -247,7 +247,11 @@ class HdfullProvider(private val context: Context) : MainAPI() {
      */
     private suspend fun getPage(path: String): Page? = withContext(Dispatchers.IO) {
         var cookie = ensureSession() ?: return@withContext null
-        var response = app.get("$mainUrl$path", headers = mapOf("Cookie" to cookie))
+        // `load`/`loadLinks` reciben urls absolutas; si se antepusiera el
+        // dominio saldria "https://hdfull.orghttps://..." (host invalido y
+        // NXDOMAIN), asi que solo se anteponen las rutas relativas.
+        val target = if (path.startsWith("http")) path else "$mainUrl$path"
+        var response = app.get(target, headers = mapOf("Cookie" to cookie))
         if (response.url.contains("/login")) {
             session = null
             val storedUser = user
@@ -256,7 +260,7 @@ class HdfullProvider(private val context: Context) : MainAPI() {
                 return@withContext null
             }
             cookie = login(storedUser, storedPassword) ?: return@withContext null
-            response = app.get("$mainUrl$path", headers = mapOf("Cookie" to cookie))
+            response = app.get(target, headers = mapOf("Cookie" to cookie))
         }
         Page(response.text, response.document)
     }
