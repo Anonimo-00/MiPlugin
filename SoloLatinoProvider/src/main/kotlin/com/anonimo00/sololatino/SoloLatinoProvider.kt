@@ -1,6 +1,7 @@
 package com.anonimo00.sololatino
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.anonimo00.shared.SearchHelper
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.LoadResponse
@@ -25,9 +26,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
 
@@ -75,10 +73,10 @@ class SoloLatinoProvider : MainAPI() {
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
-        val link = this.selectFirst("a[href]")?.attr("href") ?: return null
+        val link = this.selectFirst("a[href]")?.attr("href")?.takeIf { it.isNotBlank() } ?: return null
         val title = this.selectFirst("p.card__title")?.text()?.trim()
             ?: this.selectFirst("span.card__title")?.text()?.trim()
-            ?: this.selectFirst("img.card__poster")?.attr("alt")?.trim()
+            ?: this.selectFirst("img.card__poster")?.attr("alt")?.trim()?.takeIf { it.isNotBlank() }
             ?: return null
         val poster = this.selectFirst("img.card__poster")?.attr("src")
         val year = this.selectFirst("span.card__year")?.text()?.trim()?.toIntOrNull()
@@ -123,14 +121,16 @@ class SoloLatinoProvider : MainAPI() {
 
     // ---------- search ----------
 
-    override suspend fun search(query: String): List<SearchResponse> = searchPage(query, 1)
+    override suspend fun search(query: String): List<SearchResponse> =
+        SearchHelper.smartSearch(name, query) { searchPage(it, 1) }
 
     /**
      * Busqueda paginada: el sitio pagina el buscador con `?page=N`, asi que la
      * vista de busqueda de CloudStream puede ir cargando mas resultados.
      */
     override suspend fun search(query: String, page: Int): SearchResponseList? {
-        val list = searchPage(query, page)
+        val list = if (page == 1) SearchHelper.smartSearch(name, query) { searchPage(it, 1) }
+                   else searchPage(query, page)
         return newSearchResponseList(list, list.size >= SEARCH_PAGE_SIZE)
     }
 
@@ -216,24 +216,7 @@ class SoloLatinoProvider : MainAPI() {
             when (link.kind) {
                 // Reproductores externos (Voe, Streamwish, Vidhide...): los
                 // resuelve el extractor que CloudStream ya trae.
-                SoloLatinoKind.EMBED -> loadExtractor(link.url, link.referer, subtitleCallback) {
-                    extractorLink ->
-                    CoroutineScope(Dispatchers.IO).launch {
-                        callback.invoke(
-                            newExtractorLink(
-                                link.name,
-                                link.name,
-                                extractorLink.url,
-                            ) {
-                                this.quality = extractorLink.quality
-                                this.type = extractorLink.type
-                                this.referer = extractorLink.referer
-                                this.headers = extractorLink.headers
-                                this.extractorData = extractorLink.extractorData
-                            }
-                        )
-                    }
-                }
+                SoloLatinoKind.EMBED -> loadExtractor(link.url, link.referer, subtitleCallback, callback)
 
                 else -> callback.invoke(
                     newExtractorLink(

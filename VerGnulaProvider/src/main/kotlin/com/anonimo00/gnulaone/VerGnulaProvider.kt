@@ -1,5 +1,6 @@
 ﻿package com.anonimo00.gnulaone
 
+import com.anonimo00.shared.SearchHelper
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.LoadResponse
@@ -18,9 +19,6 @@ import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.jsoup.nodes.Element
 
@@ -48,7 +46,8 @@ class VerGnulaProvider : MainAPI() {
     override val hasQuickSearch = true
 
     /** La busqueda rapida reutiliza la busqueda normal. */
-    override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
+    override suspend fun quickSearch(query: String): List<SearchResponse> =
+        SearchHelper.quickSearch(name, query) { siteSearch(it) }
     override val supportedTypes = setOf(TvType.Movie)
 
     override val mainPage = mainPageOf(
@@ -60,9 +59,9 @@ class VerGnulaProvider : MainAPI() {
     // ---------- helpers ----------
 
     private fun Element.toSearchResult(): SearchResponse? {
-        val link = this.selectFirst("a.gn-card.gn-card--grid")?.attr("href") ?: return null
+        val link = this.selectFirst("a.gn-card.gn-card--grid")?.attr("href")?.takeIf { it.isNotBlank() } ?: return null
         val title = this.selectFirst(".gn-card__cap .gn-card__t")?.text()?.trim()
-            ?: this.selectFirst(".gn-card__poster img")?.attr("alt")?.trim()
+            ?: this.selectFirst(".gn-card__poster img")?.attr("alt")?.trim()?.takeIf { it.isNotBlank() }
             ?: return null
         val poster = this.selectFirst(".gn-card__poster img")?.attr("src")
         val year = this.selectFirst(".gn-card__cap .gn-card__y")?.text()?.trim()?.toIntOrNull()
@@ -99,7 +98,11 @@ class VerGnulaProvider : MainAPI() {
      * La busqueda normal (`/?s=`) la bloquea Cloudflare, asi que se usa el
      * endpoint de sugerencias del tema, que ya devuelve los resultados en JSON.
      */
-    override suspend fun search(query: String): List<SearchResponse> {
+    override suspend fun search(query: String): List<SearchResponse> =
+        SearchHelper.smartSearch(name, query) { siteSearch(it) }
+
+    /** Busqueda en el sitio (la usa [search] con consultas alternativas). */
+    private suspend fun siteSearch(query: String): List<SearchResponse> {
         val encoded = java.net.URLEncoder.encode(query.trim(), "UTF-8")
         val response = app.get("$mainUrl/wp-json/gnula/v1/suggest?q=$encoded")
         val array = runCatching { JSONArray(response.text) }.getOrNull() ?: return emptyList()
@@ -169,27 +172,15 @@ class VerGnulaProvider : MainAPI() {
                 if (path.startsWith("http")) path else "$mainUrl$path",
                 headers = mapOf("Referer" to data),
             )
+            // El fragmento (#lang=SUB) solo lo usa el reproductor web: el
+            // extractor de CloudStream lo tomaria como parte del codigo.
             val embed = response.document.selectFirst("div.Video iframe[src]")?.attr("src")
+                ?.takeIf { it.isNotBlank() }
+                ?.substringBefore("#")
                 ?: continue
             if (!embed.startsWith("http")) continue
 
-            loadExtractor(embed, data, subtitleCallback) { extractorLink ->
-                CoroutineScope(Dispatchers.IO).launch {
-                    callback.invoke(
-                        newExtractorLink(
-                            name,
-                            name,
-                            extractorLink.url,
-                        ) {
-                            this.quality = extractorLink.quality
-                            this.type = extractorLink.type
-                            this.referer = extractorLink.referer
-                            this.headers = extractorLink.headers
-                            this.extractorData = extractorLink.extractorData
-                        }
-                    )
-                }
-            }
+            loadExtractor(embed, data, subtitleCallback, callback)
         }
         return found
     }

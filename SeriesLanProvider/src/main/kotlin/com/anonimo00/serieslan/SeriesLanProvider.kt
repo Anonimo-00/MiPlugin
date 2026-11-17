@@ -1,5 +1,6 @@
 ﻿package com.anonimo00.serieslan
 
+import com.anonimo00.shared.SearchHelper
 import com.anonimo00.shared.VimeosBridge
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
@@ -49,7 +50,8 @@ class SeriesLanProvider : MainAPI() {
     override val hasQuickSearch = true
 
     /** La busqueda rapida reutiliza la busqueda normal. */
-    override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
+    override suspend fun quickSearch(query: String): List<SearchResponse> =
+        SearchHelper.quickSearch(name, query) { searchPage(it, 1) }
     override val supportedTypes = setOf(TvType.TvSeries, TvType.Anime)
 
     override val mainPage = mainPageOf(
@@ -107,7 +109,8 @@ class SeriesLanProvider : MainAPI() {
 
     // ---------- search ----------
 
-    override suspend fun search(query: String): List<SearchResponse> = searchPage(query, 1)
+    override suspend fun search(query: String): List<SearchResponse> =
+        SearchHelper.smartSearch(name, query) { searchPage(it, 1) }
 
     /** Busqueda paginada: la API devuelve la paginacion en `pagination`. */
     override suspend fun search(query: String, page: Int): SearchResponseList? {

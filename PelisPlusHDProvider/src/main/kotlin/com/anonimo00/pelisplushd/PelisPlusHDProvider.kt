@@ -1,5 +1,6 @@
 ﻿package com.anonimo00.pelisplushd
 
+import com.anonimo00.shared.SearchHelper
 import com.lagradost.cloudstream3.Actor
 import com.lagradost.cloudstream3.ActorData
 import com.lagradost.cloudstream3.HomePageList
@@ -25,9 +26,6 @@ import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
 
@@ -56,7 +54,8 @@ class PelisPlusHDProvider : MainAPI() {
     override val hasQuickSearch = true
 
     /** La busqueda rapida reutiliza la busqueda normal. */
-    override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
+    override suspend fun quickSearch(query: String): List<SearchResponse> =
+        SearchHelper.quickSearch(name, query) { searchPage(it, 1) }
     override val supportedTypes = setOf(
         TvType.Movie,
         TvType.TvSeries,
@@ -86,7 +85,7 @@ class PelisPlusHDProvider : MainAPI() {
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
-        val link = this.selectFirst("a.Posters-link")?.attr("href") ?: return null
+        val link = this.selectFirst("a.Posters-link")?.attr("href")?.takeIf { it.isNotBlank() } ?: return null
         val title = this.selectFirst("div.listing-content > p")?.text()?.trim()
             ?: this.selectFirst("img.Posters-img")?.attr("alt")?.trim()
                 ?.removePrefix("VER ")
@@ -130,11 +129,13 @@ class PelisPlusHDProvider : MainAPI() {
 
     // ---------- search ----------
 
-    override suspend fun search(query: String): List<SearchResponse> = searchPage(query, 1)
+    override suspend fun search(query: String): List<SearchResponse> =
+        SearchHelper.smartSearch(name, query) { searchPage(it, 1) }
 
     /** Busqueda paginada: el sitio pagina el buscador con `?page=N`. */
     override suspend fun search(query: String, page: Int): SearchResponseList? {
-        val list = searchPage(query, page)
+        val list = if (page == 1) SearchHelper.smartSearch(name, query) { searchPage(it, 1) }
+                   else searchPage(query, page)
         return newSearchResponseList(list, list.size >= SEARCH_PAGE_SIZE)
     }
 
@@ -239,23 +240,7 @@ class PelisPlusHDProvider : MainAPI() {
         for ((url, name) in links) {
             // Los reproductores (Voe, Streamwish, Vidhide, Vidara...) los
             // resuelve el extractor que CloudStream ya trae.
-            loadExtractor(url, data, subtitleCallback) { extractorLink ->
-                CoroutineScope(Dispatchers.IO).launch {
-                    callback.invoke(
-                        newExtractorLink(
-                            name,
-                            name,
-                            extractorLink.url,
-                        ) {
-                            this.quality = extractorLink.quality
-                            this.type = extractorLink.type
-                            this.referer = extractorLink.referer
-                            this.headers = extractorLink.headers
-                            this.extractorData = extractorLink.extractorData
-                        }
-                    )
-                }
-            }
+            loadExtractor(url, data, subtitleCallback, callback)
         }
         return true
     }

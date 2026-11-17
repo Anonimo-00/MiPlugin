@@ -236,10 +236,15 @@ async function verifyFlixLatam() {
   );
 
   const detail = await get(`${BASE}/pelicula/angel-y-el-pistolero-ev2BxB`);
-  const vidurl = detail.text.match(/\/vidurl\/[^"']+/)?.[0];
-  vidurl ? ok(`ficha: reproductor ${vidurl}`) : fail("ficha: sin /vidurl/");
+  const iframe = detail.text.match(/<iframe[^>]*src=["']([^"']+)["'][^>]*>/i)?.[1];
+  const playerUrl = iframe
+    ? iframe.startsWith("http") ? iframe : `${BASE}${iframe}`
+    : null;
+  playerUrl && /vidurl|embed69/.test(playerUrl)
+    ? ok(`ficha: reproductor ${playerUrl}`)
+    : fail(`ficha: sin reproductor (${iframe || "sin iframe"})`);
 
-  const { links } = await embed69Links(`${BASE}${vidurl}`, `${BASE}/pelicula/angel-y-el-pistolero-ev2BxB`);
+  const { links } = await embed69Links(playerUrl || "", `${BASE}/pelicula/angel-y-el-pistolero-ev2BxB`);
   links.length ? ok(`embed69: ${links.length} enlaces descifrados`) : fail("embed69: sin enlaces");
 }
 

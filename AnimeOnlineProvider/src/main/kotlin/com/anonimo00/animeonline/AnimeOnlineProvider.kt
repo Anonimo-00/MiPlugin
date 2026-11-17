@@ -1,5 +1,6 @@
 ﻿package com.anonimo00.animeonline
 
+import com.anonimo00.shared.SearchHelper
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.LoadResponse
@@ -20,9 +21,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import android.util.Base64
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
@@ -48,7 +46,8 @@ class AnimeOnlineProvider : MainAPI() {
     override val hasQuickSearch = true
 
     /** La busqueda rapida reutiliza la busqueda normal. */
-    override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
+    override suspend fun quickSearch(query: String): List<SearchResponse> =
+        SearchHelper.quickSearch(name, query) { siteSearch(it) }
     override val supportedTypes = setOf(TvType.Anime)
 
     override val mainPage = mainPageOf(
@@ -60,13 +59,13 @@ class AnimeOnlineProvider : MainAPI() {
     // ---------- helpers ----------
 
     private fun Element.toSearchResult(): SearchResponse? {
-        val link = this.selectFirst("h3.film-name a")?.attr("href")
-            ?: this.selectFirst("a.film-poster-ahref")?.attr("href")
+        val link = this.selectFirst("h3.film-name a")?.attr("href")?.takeIf { it.isNotBlank() }
+            ?: this.selectFirst("a.film-poster-ahref")?.attr("href")?.takeIf { it.isNotBlank() }
             ?: return null
         val title = this.selectFirst("h3.film-name a")?.text()?.trim()
-            ?: this.selectFirst("img.film-poster-img")?.attr("alt")?.trim()
+            ?: this.selectFirst("img.film-poster-img")?.attr("alt")?.trim()?.takeIf { it.isNotBlank() }
             ?: return null
-        val poster = this.selectFirst("img.film-poster-img")?.attr("data-src")
+        val poster = this.selectFirst("img.film-poster-img")?.attr("data-src")?.takeIf { it.isNotBlank() }
             ?: this.selectFirst("img.film-poster-img")?.attr("src")
         val score = this.selectFirst(".tick-quality")?.text()?.trim()
         return newTvSeriesSearchResponse(title, link, TvType.Anime) {
@@ -120,7 +119,11 @@ class AnimeOnlineProvider : MainAPI() {
 
     // ---------- search ----------
 
-    override suspend fun search(query: String): List<SearchResponse> {
+    override suspend fun search(query: String): List<SearchResponse> =
+        SearchHelper.smartSearch(name, query) { siteSearch(it) }
+
+    /** Busqueda en el sitio (la usa [search] con consultas alternativas). */
+    private suspend fun siteSearch(query: String): List<SearchResponse> {
         val document = fetch("/?s=${query.trim().replace(" ", "+")}").document
         return cards(document)
     }
@@ -192,23 +195,7 @@ class AnimeOnlineProvider : MainAPI() {
             if (!url.startsWith("http")) continue
 
             val name = server.text().trim().ifEmpty { "Server" }
-            loadExtractor(url, data, subtitleCallback) { extractorLink ->
-                CoroutineScope(Dispatchers.IO).launch {
-                    callback.invoke(
-                        newExtractorLink(
-                            name,
-                            name,
-                            extractorLink.url,
-                        ) {
-                            this.quality = extractorLink.quality
-                            this.type = extractorLink.type
-                            this.referer = extractorLink.referer
-                            this.headers = extractorLink.headers
-                            this.extractorData = extractorLink.extractorData
-                        }
-                    )
-                }
-            }
+            loadExtractor(url, data, subtitleCallback, callback)
         }
         return true
     }

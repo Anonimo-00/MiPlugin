@@ -1,6 +1,7 @@
 ﻿package com.anonimo00.latanime
 
 import android.util.Base64
+import com.anonimo00.shared.SearchHelper
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.LoadResponse
@@ -19,9 +20,6 @@ import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
 
@@ -47,7 +45,8 @@ class LatanimeProvider : MainAPI() {
     override val hasQuickSearch = true
 
     /** La busqueda rapida reutiliza la busqueda normal. */
-    override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
+    override suspend fun quickSearch(query: String): List<SearchResponse> =
+        SearchHelper.quickSearch(name, query) { siteSearch(it) }
     override val supportedTypes = setOf(TvType.Anime)
 
     override val mainPage = mainPageOf(
@@ -58,11 +57,11 @@ class LatanimeProvider : MainAPI() {
     // ---------- helpers ----------
 
     private fun Element.toSearchResponse(): SearchResponse? {
-        val link = this.selectFirst("a[href*=/anime/]")?.attr("href") ?: return null
+        val link = this.selectFirst("a[href*=/anime/]")?.attr("href")?.takeIf { it.isNotBlank() } ?: return null
         val title = this.selectFirst("div.seriedetails h3.my-1")?.text()?.trim()
-            ?: this.selectFirst("div.serieimg img")?.attr("alt")?.trim()
+            ?: this.selectFirst("div.serieimg img")?.attr("alt")?.trim()?.takeIf { it.isNotBlank() }
             ?: return null
-        val poster = this.selectFirst("div.serieimg img")?.attr("data-src")
+        val poster = this.selectFirst("div.serieimg img")?.attr("data-src")?.takeIf { it.isNotBlank() }
             ?: this.selectFirst("div.serieimg img")?.attr("src")
         val year = this.select("div.seriedetails span").lastOrNull()?.text()?.trim()?.toIntOrNull()
         return newTvSeriesSearchResponse(title, link, TvType.Anime) {
@@ -91,7 +90,11 @@ class LatanimeProvider : MainAPI() {
 
     // ---------- search ----------
 
-    override suspend fun search(query: String): List<SearchResponse> {
+    override suspend fun search(query: String): List<SearchResponse> =
+        SearchHelper.smartSearch(name, query) { siteSearch(it) }
+
+    /** Busqueda en el sitio (la usa [search] con consultas alternativas). */
+    private suspend fun siteSearch(query: String): List<SearchResponse> {
         val encoded = URLEncoder.encode(query.trim(), "UTF-8")
         val document = app.get("$mainUrl/buscar?q=$encoded").document
         return cards(document)
@@ -104,7 +107,7 @@ class LatanimeProvider : MainAPI() {
         val title = document.selectFirst("h2.mojon3, .col-lg-9 h2")?.text()?.trim()
             ?: document.selectFirst("h2")?.text()?.trim()
             ?: return null
-        val poster = document.selectFirst("img.img-fluid2")?.attr("src")
+        val poster = document.selectFirst("img.img-fluid2")?.attr("src")?.takeIf { it.isNotBlank() }
             ?: document.selectFirst("meta[property=og:image]")?.attr("content")
         val description = document.selectFirst("p.my-2.opacity-75")?.text()?.trim()
         val tags = document.select("a[href*=/genero/] div.btn").map { it.text().trim() }.distinct()
@@ -159,23 +162,7 @@ class LatanimeProvider : MainAPI() {
             if (!url.startsWith("http")) continue
 
             val name = player.text().trim().ifEmpty { "Server" }
-            loadExtractor(url, data, subtitleCallback) { extractorLink ->
-                CoroutineScope(Dispatchers.IO).launch {
-                    callback.invoke(
-                        newExtractorLink(
-                            name,
-                            name,
-                            extractorLink.url,
-                        ) {
-                            this.quality = extractorLink.quality
-                            this.type = extractorLink.type
-                            this.referer = extractorLink.referer
-                            this.headers = extractorLink.headers
-                            this.extractorData = extractorLink.extractorData
-                        }
-                    )
-                }
-            }
+            loadExtractor(url, data, subtitleCallback, callback)
         }
         return true
     }

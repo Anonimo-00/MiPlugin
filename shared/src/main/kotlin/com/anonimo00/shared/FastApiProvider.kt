@@ -24,9 +24,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import java.net.URLEncoder
 
 // ------------------------------------------------------------------- modelos
@@ -176,11 +173,11 @@ abstract class FastApiProvider : MainAPI() {
     // ---------- busqueda ----------
 
     override suspend fun search(query: String): List<SearchResponse> =
-        searchPage(query, 1)
+        SearchHelper.smartSearch(name, query) { searchPage(it, 1) }
 
-    /** La busqueda rapida de la app reutiliza la busqueda normal. */
+    /** Busqueda rapida: sin peticiones extra a TMDB mientras se escribe. */
     override suspend fun quickSearch(query: String): List<SearchResponse> =
-        searchPage(query, 1)
+        SearchHelper.quickSearch(name, query) { searchPage(it, 1) }
 
     /**
      * Busqueda paginada: la app la usa para poder "expandir" los resultados de
@@ -343,19 +340,7 @@ abstract class FastApiProvider : MainAPI() {
                     subtitleCallback.invoke(SubtitleFile(language, subtitle))
                 }
             } else {
-                loadExtractor(url, data, subtitleCallback) { extractorLink ->
-                    CoroutineScope(Dispatchers.IO).launch {
-                        callback.invoke(
-                            newExtractorLink(name, name, extractorLink.url) {
-                                this.quality = extractorLink.quality
-                                this.type = extractorLink.type
-                                this.referer = extractorLink.referer
-                                this.headers = extractorLink.headers
-                                this.extractorData = extractorLink.extractorData
-                            }
-                        )
-                    }
-                }
+                loadExtractor(url, data, subtitleCallback, callback)
             }
         }
         return found
@@ -369,7 +354,7 @@ abstract class FastApiProvider : MainAPI() {
         val url = urlOf(postType, slug)
         val title = this.title?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val tvType = typeOf(postType)
-        return if (tvType == TvType.TvSeries) {
+        val response = if (tvType == TvType.TvSeries) {
             newTvSeriesSearchResponse(title, url, tvType) {
                 this.posterUrl = posterOf(this@toSearchResponse)
                 this.year = yearOf(this@toSearchResponse)
@@ -382,6 +367,15 @@ abstract class FastApiProvider : MainAPI() {
                 this.score = scoreOf(this@toSearchResponse)
             }
         }
+        // La API no busca por este campo, asi que lo guardamos como alias para
+        // que buscar "Finding Nemo" encuentre "Buscando a Nemo".
+        SearchHelper.rememberAliases(
+            name,
+            response,
+            original_title,
+            title,
+        )
+        return response
     }
 
     companion object {

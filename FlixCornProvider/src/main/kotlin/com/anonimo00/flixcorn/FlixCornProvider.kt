@@ -1,5 +1,6 @@
 ﻿package com.anonimo00.flixcorn
 
+import com.anonimo00.shared.SearchHelper
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.LoadResponse
@@ -21,9 +22,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.nicehttp.JsonAsString
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
 
@@ -50,7 +48,8 @@ class FlixCornProvider : MainAPI() {
     override val hasQuickSearch = true
 
     /** La busqueda rapida reutiliza la busqueda normal. */
-    override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
+    override suspend fun quickSearch(query: String): List<SearchResponse> =
+        SearchHelper.quickSearch(name, query) { siteSearch(it) }
     override val supportedTypes = setOf(TvType.TvSeries, TvType.Anime)
 
     override val mainPage = mainPageOf(
@@ -63,9 +62,9 @@ class FlixCornProvider : MainAPI() {
     // ---------- helpers ----------
 
     private fun Element.toSearchResponse(): SearchResponse? {
-        val link = this.selectFirst("a[href^=/serie/]")?.attr("href") ?: return null
+        val link = this.selectFirst("a[href^=/serie/]")?.attr("href")?.takeIf { it.isNotBlank() } ?: return null
         val title = this.selectFirst("p.media-title")?.text()?.trim()
-            ?: this.selectFirst("img[alt]")?.attr("alt")?.trim()
+            ?: this.selectFirst("img[alt]")?.attr("alt")?.trim()?.takeIf { it.isNotBlank() }
             ?: return null
         val poster = this.selectFirst("div.media-cover img[src]")?.attr("src")
         val meta = this.selectFirst("div.media-meta span")?.text()?.trim()
@@ -94,7 +93,11 @@ class FlixCornProvider : MainAPI() {
 
     // ---------- search ----------
 
-    override suspend fun search(query: String): List<SearchResponse> {
+    override suspend fun search(query: String): List<SearchResponse> =
+        SearchHelper.smartSearch(name, query) { siteSearch(it) }
+
+    /** Busqueda en el sitio (la usa [search] con consultas alternativas). */
+    private suspend fun siteSearch(query: String): List<SearchResponse> {
         val encoded = URLEncoder.encode(query.trim(), "UTF-8")
         val document = app.get("$mainUrl/search?q=$encoded").document
         return cards(document)
@@ -169,8 +172,8 @@ class FlixCornProvider : MainAPI() {
         var found = false
         for (row in rows) {
             val name = row.selectFirst("span.cap-server-name")?.text()?.trim().orEmpty()
-            val path = row.selectFirst("a.cap-btn--direct[href^=/external/]")?.attr("href")
-                ?: row.selectFirst("a.cap-btn--online[href^=/player/]")?.attr("href")
+            val path = row.selectFirst("a.cap-btn--direct[href^=/external/]")?.attr("href")?.takeIf { it.isNotBlank() }
+                ?: row.selectFirst("a.cap-btn--online[href^=/player/]")?.attr("href")?.takeIf { it.isNotBlank() }
                 ?: continue
             found = true
 
@@ -200,19 +203,7 @@ class FlixCornProvider : MainAPI() {
                     }
                 )
             } else {
-                loadExtractor(embed, data, subtitleCallback) { extractorLink ->
-                    CoroutineScope(Dispatchers.IO).launch {
-                        callback.invoke(
-                            newExtractorLink(name, name, extractorLink.url) {
-                                this.quality = extractorLink.quality
-                                this.type = extractorLink.type
-                                this.referer = extractorLink.referer
-                                this.headers = extractorLink.headers
-                                this.extractorData = extractorLink.extractorData
-                            }
-                        )
-                    }
-                }
+                loadExtractor(embed, data, subtitleCallback, callback)
             }
         }
         return found

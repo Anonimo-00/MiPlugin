@@ -1,5 +1,6 @@
 ﻿package com.anonimo00.verpeliculasultra
 
+import com.anonimo00.shared.SearchHelper
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.LoadResponse
@@ -20,9 +21,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.getAndUnpack
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
 
@@ -48,7 +46,8 @@ class VerPeliculasUltraProvider : MainAPI() {
     override val hasQuickSearch = true
 
     /** La busqueda rapida reutiliza la busqueda normal. */
-    override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
+    override suspend fun quickSearch(query: String): List<SearchResponse> =
+        SearchHelper.quickSearch(name, query) { siteSearch(it) }
     override val supportedTypes = setOf(TvType.Movie)
 
     override val mainPage = mainPageOf(
@@ -62,9 +61,9 @@ class VerPeliculasUltraProvider : MainAPI() {
     // ---------- helpers ----------
 
     private fun Element.toSearchResult(): SearchResponse? {
-        val link = this.selectFirst("div.shortf-img > a[href]")?.attr("href") ?: return null
+        val link = this.selectFirst("div.shortf-img > a[href]")?.attr("href")?.takeIf { it.isNotBlank() } ?: return null
         val title = this.selectFirst("h3.shortf-link a b")?.text()?.trim()
-            ?: this.selectFirst("div.shortf-img > a[title]")?.attr("title")?.trim()
+            ?: this.selectFirst("div.shortf-img > a[title]")?.attr("title")?.trim()?.takeIf { it.isNotBlank() }
             ?: return null
         val poster = this.selectFirst("div.shortf-img img[src]")?.attr("src")
         val quality = this.selectFirst("div.shortf-quality")?.text()?.trim().orEmpty()
@@ -98,7 +97,11 @@ class VerPeliculasUltraProvider : MainAPI() {
 
     // ---------- search ----------
 
-    override suspend fun search(query: String): List<SearchResponse> {
+    override suspend fun search(query: String): List<SearchResponse> =
+        SearchHelper.smartSearch(name, query) { siteSearch(it) }
+
+    /** Busqueda en el sitio (la usa [search] con consultas alternativas). */
+    private suspend fun siteSearch(query: String): List<SearchResponse> {
         val encoded = URLEncoder.encode(query.trim(), "UTF-8")
         val document = app.get("$mainUrl/index.php?do=search&subaction=search&story=$encoded").document
         return cards(document)
@@ -109,7 +112,7 @@ class VerPeliculasUltraProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse? {
         val document = app.get(url).document
         val title = document.selectFirst("header.h-red h1 b")?.text()?.trim()
-            ?: document.selectFirst("meta[property=og:title]")?.attr("content")?.trim()
+            ?: document.selectFirst("meta[property=og:title]")?.attr("content")?.trim()?.takeIf { it.isNotBlank() }
             ?: return null
         val poster = document.selectFirst("div.film-poster img[src]")?.attr("src")
 
@@ -166,19 +169,7 @@ class VerPeliculasUltraProvider : MainAPI() {
                     }
                 )
             } else {
-                loadExtractor(url, data, subtitleCallback) { extractorLink ->
-                    CoroutineScope(Dispatchers.IO).launch {
-                        callback.invoke(
-                            newExtractorLink(name, name, extractorLink.url) {
-                                this.quality = extractorLink.quality
-                                this.type = extractorLink.type
-                                this.referer = extractorLink.referer
-                                this.headers = extractorLink.headers
-                                this.extractorData = extractorLink.extractorData
-                            }
-                        )
-                    }
-                }
+                loadExtractor(url, data, subtitleCallback, callback)
             }
         }
         return found

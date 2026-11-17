@@ -17,6 +17,7 @@ catálogos de streaming en español latino:
 | `LatanimeProvider` | [latanime.org](https://latanime.org) | Animes | es |
 | `SeriesLanProvider` | [serieslan.live](https://serieslan.live) | Series y animes | es |
 | `HackstoreProvider` | [hackstore.fo](https://www.hackstore.fo) | Películas (las series no tienen servidores) | es |
+| `HdfullProvider` | [hdfull.org](https://hdfull.org) | Películas y series (**necesita cuenta**) | es |
 
 > **Nota:** este repositorio se ha desarrollado **con ayuda de IA** (asistente
 > de programación). El código se ha ido verificando contra los sitios reales
@@ -44,7 +45,8 @@ repositorio y un workflow que publica los `.cs3` en la rama `builds`.
 │   └── src/main/kotlin/com/anonimo00/shared/
 │       ├── Embed69.kt            # Reproductor EMBED69 + solver de Anubis
 │       ├── Vimeos.kt             # Reproductor vimeos (P.A.C.K.E.R)
-│       └── FastApiProvider.kt    # Base para las APIs de WordPress FastAPI
+│       ├── FastApiProvider.kt    # Base para las APIs de WordPress FastAPI
+│       └── SearchHelper.kt       # Búsqueda con títulos alternativos (TMDB + alias)
 ├── SoloLatinoProvider/           # sololatino.net
 ├── FlixLatamProvider/            # flixlatam.com
 ├── PelisPlusHDProvider/          # pelisplushd.la
@@ -56,7 +58,8 @@ repositorio y un workflow que publica los `.cs3` en la rama `builds`.
 ├── AnimeOnlineProvider/          # animeonline.one
 ├── LatanimeProvider/             # latanime.org
 ├── SeriesLanProvider/            # serieslan.live
-└── HackstoreProvider/            # hackstore.fo
+├── HackstoreProvider/            # hackstore.fo
+└── HdfullProvider/               # hdfull.org (cuenta + ajustes)
 ```
 
 El código de `shared/` se incrusta en cada `.cs3` mediante
@@ -84,8 +87,22 @@ También funciona la de la rama principal:
 https://raw.githubusercontent.com/Anonimo-00/MiPlugin/master/repo.json
 ```
 
-Una vez añadido el repositorio, en la lista de extensiones aparecerán los once
+Una vez añadido el repositorio, en la lista de extensiones aparecerán los trece
 proveedores para instalar.
+
+### HDFull: usuario y contraseña
+
+`HdfullProvider` es el único que necesita una cuenta (el sitio es privado).
+Tras instalarlo, abre los **ajustes de la extensión** (el icono de tuerca que
+CloudStream muestra junto al proveedor) y escribe el **usuario** y la
+**contraseña** de hdfull. La extensión inicia sesión, guarda la cookie
+`PHPSESSID` en las preferencias y la reutiliza; si caduca, vuelve a entrar con
+las credenciales guardadas. Si no hay credenciales, el proveedor muestra el
+mismo diálogo al buscar o abrir el catálogo.
+
+> La validación completa de hdfull (vídeo real) requiere una cuenta; el protocolo
+> (login, búsqueda, episodios, cifrado `ad` y tabla de servidores) se verificó
+> contra el JavaScript público del sitio y el sitemap.
 
 ## Cuántas fuentes da cada sitio
 
@@ -94,7 +111,7 @@ Los sitios ofrecen **varias fuentes por título**, no una sola:
 | Sitio | Fuentes por título | De dónde salen |
 |---|---|---|
 | sololatino.net | 2 HLS + 6 embebidas | `player.pelisserieshoy.com` (LAT y SUB) + `embed69.org` (LAT/SUB × 3 servidores) |
-| flixlatam.com | 6 embebidas | `dataLink` del reproductor EMBED69 (LAT/SUB × streamwish, voe, vidhide) |
+| flixlatam.com | 6 embebidas | iframe `embed69.org/f/<id>` (antes `/vidurl/`) → `dataLink` (LAT/SUB × streamwish, voe, vidhide) |
 | pelisplushd.la | 3 embebidas | `li[data-url]` / `#link_url span[url]` (streamwish, vidhide, vidara) |
 | gnula.la | 1 por reproductor | `/wp-api/v1/player` → vimeos (P.A.C.K.E.R) |
 | cinecalidad.org | 2 por reproductor | `/wp-api/v1/player` → voe + vimeos |
@@ -145,6 +162,26 @@ Cosas que hacen que las extensiones funcionen bien en la app:
   `-SNAPSHOT` desde jitpack y falla de vez en cuando; el workflow reintenta
   hasta tres veces y, si persiste, saca el error como *annotation* del run.
 - **Iconos verificados**: todos los `iconUrl` devuelven imagen (comprobado).
+- **Búsqueda con títulos alternativos** (`shared/SearchHelper.kt`): los sitios
+  latinos guardan el título local y el original por separado, y casi ningún
+  buscador indexa los dos (por ejemplo en gnula, "finding nemo" da 0 resultados
+  aunque "Buscando a Nemo" está en el catálogo). Todos los proveedores pasan por
+  `smartSearch`, que:
+  1. normaliza acentos, puntuación y artículos para comparar,
+  2. prueba variantes de la consulta si la búsqueda directa es pobre,
+  3. consulta TMDB (con la key pública que ya distribuye CloudStream) para
+     obtener el título en español y el original, y busca también por ellos,
+  4. recuerda los alias vistos durante la sesión (incluido el `original_title`
+     de la API de gnula/cinecalidad), de modo que buscar por cualquiera de ellos
+     devuelve el mismo título,
+  5. fusiona, quita duplicados y ordena por relevancia.
+  `quickSearch` usa una versión ligera (sin TMDB) porque la app la llama mientras
+  se escribe.
+
+> **Notas de la app de pruebas de CloudStream:** el primer resultado que prueba
+> en AnimeOnline es una URL muerta del propio sitio, y la película de prueba de
+> Hackstore solo tiene descarga, no servidores online. Ninguno de los dos es un
+> fallo del proveedor (verificado con `tools/verify.mjs`).
 
 ## Protocolos que se resuelven
 
@@ -214,7 +251,7 @@ proveedor), y después el catálogo, la búsqueda y la ficha.
 | 11 | <https://latanime.org/> | Hecho |
 | 12 | <https://animejara.com/catalogo> | Descartado: **todo** el sitio (incluido su CDN `hj.animejara.com`) está detrás del reto gestionado de Cloudflare y no hay mirror |
 | 13 | <https://serieslan.live/> | Hecho |
-| 14 | <https://hdfull.to/> | Descartado: el dominio real es `hdfull.sbs` (bloqueado) y **todo el sitio pide cuenta** (`POST /a/login` + `__csrf_magic`), así que no sirve como proveedor público |
+| 14 | <https://hdfull.to/> | Hecho como `HdfullProvider`: el dominio real es `hdfull.org` (los `.sbs`/`.to` están bloqueados) y pide cuenta, así que se añadió un panel de ajustes con usuario/contraseña |
 
 Los tres sitios con Cloudflare se comprobaron también con navegador real
 (browse): `animejara.com` carga en el navegador pero su API y su CDN no

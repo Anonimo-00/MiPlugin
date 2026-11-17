@@ -1,6 +1,7 @@
 ﻿package com.anonimo00.flixlatam
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.anonimo00.shared.SearchHelper
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.LoadResponse
@@ -23,9 +24,6 @@ import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
 
@@ -47,7 +45,8 @@ class FlixLatamProvider : MainAPI() {
     override val hasQuickSearch = true
 
     /** La busqueda rapida reutiliza la busqueda normal. */
-    override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
+    override suspend fun quickSearch(query: String): List<SearchResponse> =
+        SearchHelper.quickSearch(name, query) { siteSearch(it) }
     override val supportedTypes = setOf(
         TvType.Movie,
         TvType.TvSeries,
@@ -70,11 +69,11 @@ class FlixLatamProvider : MainAPI() {
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
-        val link = this.selectFirst("div.poster a[href]")?.attr("href")
-            ?: this.selectFirst("div.data h2 a[href]")?.attr("href")
+        val link = this.selectFirst("div.poster a[href]")?.attr("href")?.takeIf { it.isNotBlank() }
+            ?: this.selectFirst("div.data h2 a[href]")?.attr("href")?.takeIf { it.isNotBlank() }
             ?: return null
         val title = this.selectFirst("div.data h2 a")?.text()?.trim()
-            ?: this.selectFirst("div.poster img")?.attr("alt")?.trim()
+            ?: this.selectFirst("div.poster img")?.attr("alt")?.trim()?.takeIf { it.isNotBlank() }
             ?: return null
         val poster = this.selectFirst("div.poster img")?.attr("src")
         val year = this.selectFirst("div.data span")?.text()?.trim()?.toIntOrNull()
@@ -117,7 +116,11 @@ class FlixLatamProvider : MainAPI() {
 
     // ---------- search ----------
 
-    override suspend fun search(query: String): List<SearchResponse> {
+    override suspend fun search(query: String): List<SearchResponse> =
+        SearchHelper.smartSearch(name, query) { siteSearch(it) }
+
+    /** Busqueda en el sitio (la usa [search] con consultas alternativas). */
+    private suspend fun siteSearch(query: String): List<SearchResponse> {
         val encoded = URLEncoder.encode(query.trim(), "UTF-8")
         val document = app.get("$mainUrl/search?s=$encoded").document
         return cards(document)
@@ -194,25 +197,7 @@ class FlixLatamProvider : MainAPI() {
             // Los enlaces apuntan a reproductores externos (Voe, Streamwish,
             // Vidhide...) que CloudStream ya trae extractores. El referer es la
             // pagina del reproductor, igual que en el reproductor del sitio.
-            loadExtractor(link.url, link.referer, subtitleCallback) { extractorLink ->
-                // `newExtractorLink` es suspend y el callback no lo es, asi que
-                // hace falta un scope para emitir el enlace al reproductor.
-                CoroutineScope(Dispatchers.IO).launch {
-                    callback.invoke(
-                        newExtractorLink(
-                            link.name,
-                            link.name,
-                            extractorLink.url,
-                        ) {
-                            this.quality = extractorLink.quality
-                            this.type = extractorLink.type
-                            this.referer = extractorLink.referer
-                            this.headers = extractorLink.headers
-                            this.extractorData = extractorLink.extractorData
-                        }
-                    )
-                }
-            }
+            loadExtractor(link.url, link.referer, subtitleCallback, callback)
         }
         return found
     }

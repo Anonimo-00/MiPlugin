@@ -36,7 +36,12 @@ internal object FlixLatamPlayer {
      */
     suspend fun resolve(pageUrl: String): List<FlixLatamLink> {
         val page = app.get(pageUrl).document
-        val playerPath = page.selectFirst("iframe[src*=/vidurl/]")?.attr("src")
+        // El sitio cambio el reproductor: antes era `/vidurl/<id>/` y ahora
+        // apunta directamente a `https://embed69.org/f/<id>/`. Se aceptan los dos.
+        val playerPath = page
+            .selectFirst("iframe[src*=/vidurl/], iframe[src*='embed69.org/f/']")
+            ?.attr("src")
+            ?.takeIf { it.isNotBlank() }
             ?: return emptyList()
         val playerUrl = if (playerPath.startsWith("http")) playerPath else "$BASE$playerPath"
         return Embed69.resolve(playerUrl, pageUrl).map {

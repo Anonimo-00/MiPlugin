@@ -1,6 +1,7 @@
 ﻿package com.anonimo00.hackstore
 
 import com.anonimo00.shared.Vimeos
+import com.anonimo00.shared.SearchHelper
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.LoadResponse
@@ -51,7 +52,8 @@ class HackstoreProvider : MainAPI() {
     override val hasQuickSearch = true
 
     /** La busqueda rapida reutiliza la busqueda normal. */
-    override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
+    override suspend fun quickSearch(query: String): List<SearchResponse> =
+        SearchHelper.quickSearch(name, query) { searchPage(it, 1) }
     override val supportedTypes = setOf(
         TvType.Movie,
         TvType.TvSeries,
@@ -67,11 +69,11 @@ class HackstoreProvider : MainAPI() {
     // ---------- helpers ----------
 
     private fun Element.toSearchResult(): SearchResponse? {
-        val link = this.selectFirst(".movie-back a[href]")?.attr("href")
-            ?: this.selectFirst("h3 a.movie-title")?.attr("href")
+        val link = this.selectFirst(".movie-back a[href]")?.attr("href")?.takeIf { it.isNotBlank() }
+            ?: this.selectFirst("h3 a.movie-title")?.attr("href")?.takeIf { it.isNotBlank() }
             ?: return null
         val title = this.selectFirst("h3 a.movie-title")?.text()?.trim()
-            ?: this.selectFirst(".poster-pad img")?.attr("alt")?.trim()
+            ?: this.selectFirst(".poster-pad img")?.attr("alt")?.trim()?.takeIf { it.isNotBlank() }
             ?: return null
         val poster = this.selectFirst(".poster-pad img")?.attr("data-src")
         val year = this.selectFirst(".audios .audio")?.text()?.trim()?.toIntOrNull()
@@ -113,11 +115,13 @@ class HackstoreProvider : MainAPI() {
 
     // ---------- search ----------
 
-    override suspend fun search(query: String): List<SearchResponse> = searchPage(query, 1)
+    override suspend fun search(query: String): List<SearchResponse> =
+        SearchHelper.smartSearch(name, query) { searchPage(it, 1) }
 
     /** Busqueda paginada: WordPress pagina el buscador con `?paged=N`. */
     override suspend fun search(query: String, page: Int): SearchResponseList? {
-        val list = searchPage(query, page)
+        val list = if (page == 1) SearchHelper.smartSearch(name, query) { searchPage(it, 1) }
+                   else searchPage(query, page)
         return newSearchResponseList(list, list.size >= SEARCH_PAGE_SIZE)
     }
 
@@ -136,7 +140,7 @@ class HackstoreProvider : MainAPI() {
             ?: document.selectFirst("h1 a")?.text()?.trim()
             ?: document.selectFirst("h1")?.text()?.trim()
             ?: return null
-        val poster = document.selectFirst(".watch-content img.lazy")?.attr("data-src")
+        val poster = document.selectFirst(".watch-content img.lazy")?.attr("data-src")?.takeIf { it.isNotBlank() }
             ?: document.selectFirst(".watch-content img")?.attr("src")
         val description = document.selectFirst(".watch-text p.wp-block-paragraph")?.text()?.trim()
             ?: document.selectFirst(".watch-text p")?.text()?.trim()
