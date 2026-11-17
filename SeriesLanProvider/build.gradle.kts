@@ -1,4 +1,4 @@
-version = 4
+version = 5
 
 android {
     namespace = "com.anonimo00.serieslan"
@@ -16,4 +16,5 @@ cloudstream {
     language = "es"
     iconUrl = "https://serieslan.live/favicon.ico"
 }
+
 

@@ -1,4 +1,4 @@
-version = 4
+version = 5
 
 android {
     namespace = "com.anonimo00.flixlatam"
@@ -18,4 +18,5 @@ cloudstream {
     language = "es"
     iconUrl = "https://flixlatam.com/themes/dooplay/assets/img/favicon.png"
 }
+
 

@@ -1,4 +1,4 @@
-version = 4
+version = 5
 
 android {
     namespace = "com.anonimo00.sololatino"
@@ -20,4 +20,5 @@ cloudstream {
     language = "es"
     iconUrl = "https://sololatino.net/images/logo.png"
 }
+
 

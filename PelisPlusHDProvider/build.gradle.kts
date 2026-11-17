@@ -1,4 +1,4 @@
-version = 4
+version = 5
 
 android {
     namespace = "com.anonimo00.pelisplushd"
@@ -18,4 +18,5 @@ cloudstream {
     language = "es"
     iconUrl = "https://pelisplushd.la/static/images/logo/logo.png"
 }
+
 

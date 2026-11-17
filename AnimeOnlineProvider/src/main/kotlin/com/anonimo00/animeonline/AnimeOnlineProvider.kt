@@ -205,7 +205,7 @@ class AnimeOnlineProvider : MainAPI() {
          * Dominios por orden de preferencia. `animeonline.one` es el que
          * responde sin reto de Cloudflare; el `.ninja` oficial esta bloqueado.
          */
-        private val DOMAINS = listOf("https://animeonline.one", "https://ww4.animeonline.ninja")
+        private val DOMAINS = listOf("https://ww4.animeonline.ninja", "https://animeonline.one")
 
         /** Convierte una url absoluta del sitio en un path relativo. */
         private fun urlPath(url: String): String {
